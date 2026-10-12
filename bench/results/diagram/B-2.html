@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checkout Platform: Architecture Overview</title>
+<style>
+  :root{
+    --bg:#f5f7fb; --panel:#ffffff; --ink:#1b2333; --muted:#5b6578; --line:#e3e8f0;
+    --accent:#4f46e5; --accent-soft:#eef0ff;
+    --client:#0ea5e9; --client-bg:#e8f6fd;
+    --gateway:#8b5cf6; --gateway-bg:#f2edfe;
+    --service:#4f46e5; --service-bg:#eef0ff;
+    --store:#059669; --store-bg:#e7f6f0;
+    --external:#d97706; --external-bg:#fdf3e4;
+    --edge:#8a94a8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+  header{background:linear-gradient(135deg,#1e1b4b 0%,#312e81 55%,#4338ca 100%);color:#fff;padding:44px 24px 56px}
+  header .wrap{max-width:1180px;margin:0 auto}
+  header .eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:12px;opacity:.75;font-weight:600}
+  header h1{margin:6px 0 10px;font-size:34px;line-height:1.2;font-weight:700}
+  header p{margin:0;max-width:760px;opacity:.88}
+  main{max-width:1180px;margin:-30px auto 60px;padding:0 24px}
+  section.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 1px 2px rgba(16,24,40,.04),0 8px 24px rgba(16,24,40,.06);padding:26px 28px;margin-bottom:24px}
+  h2{margin:0 0 6px;font-size:21px}
+  h2 .num{display:inline-block;width:28px;height:28px;border-radius:8px;background:var(--accent-soft);
+    color:var(--accent);text-align:center;line-height:28px;font-size:14px;margin-right:10px;vertical-align:2px}
+  .lede{color:var(--muted);margin:0 0 18px}
+  nav.toc{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+  nav.toc a{color:#fff;text-decoration:none;font-size:13px;padding:6px 12px;border-radius:999px;
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2)}
+  nav.toc a:hover{background:rgba(255,255,255,.22)}
+
+  /* Diagram */
+  .diagram-wrap{border:1px solid var(--line);border-radius:12px;background:
+    radial-gradient(circle,#dfe5ef 1px,transparent 1px) 0 0/22px 22px,#fbfcfe;overflow-x:auto}
+  svg.arch{display:block;width:100%;min-width:900px;height:auto}
+  .node rect{stroke-width:1.6;transition:filter .2s,opacity .2s,stroke-width .2s}
+  .node .title{font-weight:650;font-size:14.5px;fill:var(--ink)}
+  .node .sub{font-size:11.5px;fill:var(--muted)}
+  .node{cursor:pointer;transition:opacity .2s}
+  .node.client rect{fill:var(--client-bg);stroke:var(--client)}
+  .node.gateway rect{fill:var(--gateway-bg);stroke:var(--gateway)}
+  .node.service rect{fill:var(--service-bg);stroke:var(--service)}
+  .node.store rect{fill:var(--store-bg);stroke:var(--store)}
+  .node.external rect{fill:var(--external-bg);stroke:var(--external);stroke-dasharray:5 3}
+  .node .dot{stroke:none}
+  .node.client .dot{fill:var(--client)} .node.gateway .dot{fill:var(--gateway)}
+  .node.service .dot{fill:var(--service)} .node.store .dot{fill:var(--store)}
+  .node.external .dot{fill:var(--external)}
+  .edge{fill:none;stroke:var(--edge);stroke-width:1.8;marker-end:url(#arrow);transition:opacity .2s,stroke .2s}
+  .elabel rect{fill:#fff;stroke:var(--line);stroke-width:1}
+  .elabel text{font-size:11.5px;fill:#3b4558;text-anchor:middle}
+  .elabel .gate{fill:#b45309;font-weight:600;font-size:10.5px}
+  .elabel{transition:opacity .2s}
+  .edge-num{font-size:10px;font-weight:700;fill:#fff;text-anchor:middle}
+  .edge-num-bg{fill:var(--edge)}
+
+  svg.focus .node{opacity:.28}
+  svg.focus .edge{opacity:.12}
+  svg.focus .elabel{opacity:.15}
+  svg.focus .node.on{opacity:1}
+  svg.focus .node.on rect{stroke-width:2.6;filter:drop-shadow(0 4px 10px rgba(79,70,229,.25))}
+  svg.focus .edge.on{opacity:1;stroke:var(--accent);stroke-width:2.6;marker-end:url(#arrow-on);
+    stroke-dasharray:8 5;animation:flow .7s linear infinite}
+  svg.focus .elabel.on{opacity:1}
+  svg.focus .elabel.on rect{stroke:var(--accent);fill:var(--accent-soft)}
+  svg.focus .elabel.on .edge-num-bg{fill:var(--accent)}
+  @keyframes flow{to{stroke-dashoffset:-13}}
+  @media (prefers-reduced-motion:reduce){svg.focus .edge.on{animation:none}}
+
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin:14px 2px 0;font-size:13px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .sw{width:14px;height:14px;border-radius:4px;border:1.6px solid}
+  .sw.client{background:var(--client-bg);border-color:var(--client)}
+  .sw.gateway{background:var(--gateway-bg);border-color:var(--gateway)}
+  .sw.service{background:var(--service-bg);border-color:var(--service)}
+  .sw.store{background:var(--store-bg);border-color:var(--store)}
+  .sw.external{background:var(--external-bg);border-color:var(--external);border-style:dashed}
+  .hint{font-size:13px;color:var(--muted);margin-top:8px}
+  .hint kbd{font:12px ui-monospace,Consolas,monospace;background:#f1f3f8;border:1px solid var(--line);
+    border-radius:4px;padding:1px 5px}
+
+  /* Callout */
+  .rule{display:flex;gap:14px;align-items:flex-start;background:#fff8eb;border:1px solid #f6d9a8;
+    border-left:4px solid var(--external);border-radius:10px;padding:14px 16px;margin:18px 0 0}
+  .rule .icon{flex:none;width:30px;height:30px}
+  .rule strong{display:block;margin-bottom:2px}
+
+  /* Tables */
+  table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;border:1px solid var(--line);
+    border-radius:10px;overflow:hidden}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f6f8fc;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:650}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:nth-child(even) td{background:#fbfcfe}
+  tbody tr.clickable{cursor:pointer}
+  tbody tr.clickable:hover td,tbody tr.active td{background:var(--accent-soft)}
+  .pill{display:inline-block;font-size:12px;padding:1px 9px;border-radius:999px;border:1px solid;white-space:nowrap}
+  .pill.client{color:#0369a1;background:var(--client-bg);border-color:#9bd7f3}
+  .pill.gateway{color:#6d28d9;background:var(--gateway-bg);border-color:#cdb9fb}
+  .pill.service{color:#4338ca;background:var(--service-bg);border-color:#c3c6fb}
+  .pill.store{color:#047857;background:var(--store-bg);border-color:#a7e0c9}
+  .pill.external{color:#b45309;background:var(--external-bg);border-color:#f5cf94}
+  code{font:13px ui-monospace,SFMono-Regular,Consolas,monospace;background:#f1f3f8;border:1px solid var(--line);
+    border-radius:5px;padding:1px 5px}
+  .n{display:inline-block;min-width:22px;height:22px;line-height:22px;border-radius:6px;background:#eef1f6;
+    color:#3b4558;font-size:12px;font-weight:700;text-align:center}
+  .muted{color:var(--muted)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+  @media (max-width:900px){.grid2{grid-template-columns:1fr}}
+
+  /* Walkthrough */
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+  button{font:inherit;font-size:14px;border:1px solid var(--line);background:#fff;color:var(--ink);
+    padding:7px 14px;border-radius:8px;cursor:pointer}
+  button:hover{border-color:#c7cde0;background:#f8f9fd}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#4338ca}
+  .progress{flex:1;min-width:120px;height:6px;background:#eef1f6;border-radius:99px;overflow:hidden}
+  .progress i{display:block;height:100%;width:0;background:var(--accent);transition:width .35s}
+  ol.steps{list-style:none;margin:0;padding:0;counter-reset:s}
+  ol.steps li{position:relative;padding:12px 16px 12px 58px;border:1px solid var(--line);border-radius:10px;
+    margin-bottom:10px;cursor:pointer;transition:background .2s,border-color .2s,box-shadow .2s}
+  ol.steps li::before{counter-increment:s;content:counter(s);position:absolute;left:16px;top:12px;width:28px;height:28px;
+    border-radius:50%;background:#eef1f6;color:#3b4558;font-weight:700;font-size:13px;text-align:center;line-height:28px}
+  ol.steps li:hover{border-color:#c7cde0}
+  ol.steps li.active{background:var(--accent-soft);border-color:var(--accent);box-shadow:0 0 0 3px rgba(79,70,229,.12)}
+  ol.steps li.active::before{background:var(--accent);color:#fff}
+  ol.steps li.gated{border-left:4px solid var(--external)}
+  ol.steps .t{font-weight:650}
+  ol.steps .d{color:var(--muted);font-size:14px}
+  .tag{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#b45309;
+    background:#fff3df;border:1px solid #f6d9a8;border-radius:5px;padding:0 6px;margin-left:6px;vertical-align:1px}
+  .sticky-diagram{position:sticky;top:12px}
+  ul.unknowns{margin:6px 0 0;padding-left:20px;color:var(--muted);font-size:14px}
+  ul.unknowns li{margin:4px 0}
+  footer{text-align:center;color:var(--muted);font-size:13px;padding:0 24px 40px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Architecture overview · New engineer onboarding</div>
+    <h1>Checkout Platform</h1>
+    <p>A map of the twelve components that make up the checkout platform, how they connect, and what happens when a customer checks out.</p>
+    <nav class="toc">
+      <a href="#diagram">System diagram</a>
+      <a href="#components">Components</a>
+      <a href="#connections">Connections</a>
+      <a href="#walkthrough">Checkout walkthrough</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<section class="card" id="diagram">
+  <h2><span class="num">1</span>System diagram</h2>
+  <p class="lede">Every component and every connection, with each connection labelled. Arrows point in the direction of the call or the flow of data.</p>
+
+  <div class="diagram-wrap">
+  <svg class="arch" id="arch" viewBox="0 0 1340 610" role="img" aria-labelledby="archTitle archDesc">
+    <title id="archTitle">Checkout platform architecture</title>
+    <desc id="archDesc">Web app and Mobile app call the API gateway over HTTPS. The API gateway calls the Checkout service over gRPC. The Checkout service loads the cart from the Cart service over gRPC, asks the Fraud service for a fraud score, charges the card through the Payment service, writes the order to Postgres, and publishes order.created to Kafka. The Cart service reads and writes carts in Redis. The Payment service calls the Stripe payment API. The Email service consumes order.created from Kafka and sends the receipt.</desc>
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#8a94a8"/>
+      </marker>
+      <marker id="arrow-on" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#4f46e5"/>
+      </marker>
+    </defs>
+
+    <!-- Edges -->
+    <path id="e1"  class="edge" d="M170,238 L259,308"/>
+    <path id="e2"  class="edge" d="M170,402 L259,332"/>
+    <path id="e3"  class="edge" d="M410,320 L489,320"/>
+    <path id="e4"  class="edge" d="M650,292 L849,82"/>
+    <path id="e5"  class="edge" d="M1010,80 L1159,80"/>
+    <path id="e6"  class="edge" d="M650,306 L849,201"/>
+    <path id="e7"  class="edge" d="M650,320 L849,320"/>
+    <path id="e8"  class="edge" d="M1010,320 L1159,320"/>
+    <path id="e9"  class="edge" d="M650,334 L849,439"/>
+    <path id="e10" class="edge" d="M650,348 L849,558"/>
+    <path id="e11" class="edge" d="M1010,560 L1159,560"/>
+
+    <!-- Edge labels -->
+    <g class="elabel" data-edge="e1"  transform="translate(214,273)"><rect/><text y="4">HTTPS</text></g>
+    <g class="elabel" data-edge="e2"  transform="translate(214,367)"><rect/><text y="4">HTTPS</text></g>
+    <g class="elabel" data-edge="e3"  transform="translate(450,320)"><rect/><text y="4">gRPC</text></g>
+    <g class="elabel" data-edge="e4"  transform="translate(770,166)"><rect/><text y="4">gRPC · loads the cart</text></g>
+    <g class="elabel" data-edge="e5"  transform="translate(1085,80)"><rect/><text y="4">reads &amp; writes carts</text></g>
+    <g class="elabel" data-edge="e6"  transform="translate(770,243)"><rect/><text y="4">asks for a fraud score</text></g>
+    <g class="elabel" data-edge="e7"  transform="translate(770,320)"><rect/><text y="4">charges the card</text></g>
+    <g class="elabel" data-edge="e8"  transform="translate(1085,320)"><rect/><text y="4">payment API call</text></g>
+    <g class="elabel" data-edge="e9"  transform="translate(770,398)"><rect/><text y="-3">writes the order</text><text class="gate" y="11">only after fraud ✓ + charge ✓</text></g>
+    <g class="elabel" data-edge="e10" transform="translate(770,476)"><rect/><text y="4">publishes order.created</text></g>
+    <g class="elabel" data-edge="e11" transform="translate(1085,560)"><rect/><text y="4">consumes order.created</text></g>
+
+    <!-- Nodes -->
+    <g class="node client" data-node="web">
+      <rect x="20" y="210" width="150" height="56" rx="10"/>
+      <circle class="dot" cx="36" cy="238" r="4"/>
+      <text class="title" x="48" y="235">Web app</text>
+      <text class="sub" x="48" y="252">browser</text>
+    </g>
+    <g class="node client" data-node="mobile">
+      <rect x="20" y="374" width="150" height="56" rx="10"/>
+      <circle class="dot" cx="36" cy="402" r="4"/>
+      <text class="title" x="48" y="407">Mobile app</text>
+    </g>
+    <g class="node gateway" data-node="gw">
+      <rect x="260" y="292" width="150" height="56" rx="10"/>
+      <circle class="dot" cx="276" cy="320" r="4"/>
+      <text class="title" x="288" y="325">API gateway</text>
+    </g>
+    <g class="node service" data-node="checkout">
+      <rect x="490" y="280" width="160" height="80" rx="12"/>
+      <circle class="dot" cx="506" cy="320" r="4"/>
+      <text class="title" x="518" y="317">Checkout</text>
+      <text class="sub" x="518" y="334">service</text>
+    </g>
+    <g class="node service" data-node="cart">
+      <rect x="850" y="52" width="160" height="56" rx="10"/>
+      <circle class="dot" cx="866" cy="80" r="4"/>
+      <text class="title" x="878" y="77">Cart</text>
+      <text class="sub" x="878" y="94">service</text>
+    </g>
+    <g class="node service" data-node="fraud">
+      <rect x="850" y="172" width="160" height="56" rx="10"/>
+      <circle class="dot" cx="866" cy="200" r="4"/>
+      <text class="title" x="878" y="197">Fraud</text>
+      <text class="sub" x="878" y="214">service</text>
+    </g>
+    <g class="node service" data-node="payment">
+      <rect x="850" y="292" width="160" height="56" rx="10"/>
+      <circle class="dot" cx="866" cy="320" r="4"/>
+      <text class="title" x="878" y="317">Payment</text>
+      <text class="sub" x="878" y="334">service</text>
+    </g>
+    <g class="node store" data-node="postgres">
+      <rect x="850" y="412" width="160" height="56" rx="10"/>
+      <circle class="dot" cx="866" cy="440" r="4"/>
+      <text class="title" x="878" y="437">Postgres</text>
+      <text class="sub" x="878" y="454">orders database</text>
+    </g>
+    <g class="node store" data-node="kafka">
+      <rect x="850" y="532" width="160" height="56" rx="10"/>
+      <circle class="dot" cx="866" cy="560" r="4"/>
+      <text class="title" x="878" y="557">Kafka</text>
+      <text class="sub" x="878" y="574">event bus</text>
+    </g>
+    <g class="node store" data-node="redis">
+      <rect x="1160" y="52" width="160" height="56" rx="10"/>
+      <circle class="dot" cx="1176" cy="80" r="4"/>
+      <text class="title" x="1188" y="77">Redis</text>
+      <text class="sub" x="1188" y="94">cart cache</text>
+    </g>
+    <g class="node external" data-node="stripe">
+      <rect x="1160" y="292" width="160" height="56" rx="10"/>
+      <circle class="dot" cx="1176" cy="320" r="4"/>
+      <text class="title" x="1188" y="317">Stripe</text>
+      <text class="sub" x="1188" y="334">external payment provider</text>
+    </g>
+    <g class="node service" data-node="email">
+      <rect x="1160" y="532" width="160" height="56" rx="10"/>
+      <circle class="dot" cx="1176" cy="560" r="4"/>
+      <text class="title" x="1188" y="557">Email</text>
+      <text class="sub" x="1188" y="574">service</text>
+    </g>
+  </svg>
+  </div>
+
+  <div class="legend">
+    <span><i class="sw client"></i>Client app</span>
+    <span><i class="sw gateway"></i>Gateway</span>
+    <span><i class="sw service"></i>Service</span>
+    <span><i class="sw store"></i>Database / cache / event bus</span>
+    <span><i class="sw external"></i>External provider</span>
+  </div>
+  <p class="hint">Hover or tap a component to isolate its connections. Click a row in the connections table or a step in the walkthrough to highlight it here. Press <kbd>Esc</kbd> to clear.</p>
+
+  <div class="rule">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#d97706" d="M12 2 1 21h22L12 2zm0 4.5L19.5 19h-15L12 6.5zM11 10v5h2v-5h-2zm0 6v2h2v-2h-2z"/></svg>
+    <div>
+      <strong>Business rule</strong>
+      An order is only written after the fraud score passes <em>and</em> the charge succeeds.
+    </div>
+  </div>
+</section>
+
+<section class="card" id="components">
+  <h2><span class="num">2</span>Components</h2>
+  <p class="lede">Twelve components in total. Descriptions are limited to what the connections tell us.</p>
+  <table>
+    <thead><tr><th>Component</th><th>Kind</th><th>Talks to / used by</th></tr></thead>
+    <tbody>
+      <tr class="clickable" data-node="web"><td><strong>Web app</strong> <span class="muted">(browser)</span></td><td><span class="pill client">Client</span></td><td>Calls the API gateway over HTTPS.</td></tr>
+      <tr class="clickable" data-node="mobile"><td><strong>Mobile app</strong></td><td><span class="pill client">Client</span></td><td>Calls the API gateway over HTTPS.</td></tr>
+      <tr class="clickable" data-node="gw"><td><strong>API gateway</strong></td><td><span class="pill gateway">Gateway</span></td><td>Receives HTTPS from both apps; calls the Checkout service over gRPC.</td></tr>
+      <tr class="clickable" data-node="checkout"><td><strong>Checkout service</strong></td><td><span class="pill service">Service</span></td><td>Loads the cart (Cart service), asks for a fraud score (Fraud service), charges the card (Payment service), writes the order (Postgres), publishes <code>order.created</code> (Kafka).</td></tr>
+      <tr class="clickable" data-node="cart"><td><strong>Cart service</strong></td><td><span class="pill service">Service</span></td><td>Serves the cart to the Checkout service over gRPC; reads and writes carts in Redis.</td></tr>
+      <tr class="clickable" data-node="fraud"><td><strong>Fraud service</strong></td><td><span class="pill service">Service</span></td><td>Provides a fraud score to the Checkout service.</td></tr>
+      <tr class="clickable" data-node="payment"><td><strong>Payment service</strong></td><td><span class="pill service">Service</span></td><td>Charges the card for the Checkout service by calling the Stripe payment API.</td></tr>
+      <tr class="clickable" data-node="postgres"><td><strong>Postgres</strong></td><td><span class="pill store">Orders database</span></td><td>The Checkout service writes orders here.</td></tr>
+      <tr class="clickable" data-node="redis"><td><strong>Redis</strong></td><td><span class="pill store">Cart cache</span></td><td>The Cart service reads and writes carts here.</td></tr>
+      <tr class="clickable" data-node="kafka"><td><strong>Kafka</strong></td><td><span class="pill store">Event bus</span></td><td>Carries <code>order.created</code> from the Checkout service to the Email service.</td></tr>
+      <tr class="clickable" data-node="stripe"><td><strong>Stripe</strong></td><td><span class="pill external">External</span></td><td>External payment provider, called by the Payment service.</td></tr>
+      <tr class="clickable" data-node="email"><td><strong>Email service</strong></td><td><span class="pill service">Service</span></td><td>Consumes <code>order.created</code> from Kafka and sends the receipt.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="card" id="connections">
+  <h2><span class="num">3</span>Connections</h2>
+  <p class="lede">All eleven connections. A protocol is listed only where one is specified.</p>
+  <table>
+    <thead><tr><th>#</th><th>From</th><th>To</th><th>Protocol</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr class="clickable" data-edge="e1"><td><span class="n">1</span></td><td>Web app</td><td>API gateway</td><td>HTTPS</td><td class="muted">—</td></tr>
+      <tr class="clickable" data-edge="e2"><td><span class="n">2</span></td><td>Mobile app</td><td>API gateway</td><td>HTTPS</td><td class="muted">—</td></tr>
+      <tr class="clickable" data-edge="e3"><td><span class="n">3</span></td><td>API gateway</td><td>Checkout service</td><td>gRPC</td><td class="muted">—</td></tr>
+      <tr class="clickable" data-edge="e4"><td><span class="n">4</span></td><td>Checkout service</td><td>Cart service</td><td>gRPC</td><td>Loads the cart</td></tr>
+      <tr class="clickable" data-edge="e5"><td><span class="n">5</span></td><td>Cart service</td><td>Redis</td><td class="muted">not specified</td><td>Reads and writes carts</td></tr>
+      <tr class="clickable" data-edge="e6"><td><span class="n">6</span></td><td>Checkout service</td><td>Fraud service</td><td class="muted">not specified</td><td>Asks for a fraud score</td></tr>
+      <tr class="clickable" data-edge="e7"><td><span class="n">7</span></td><td>Checkout service</td><td>Payment service</td><td class="muted">not specified</td><td>Charges the card</td></tr>
+      <tr class="clickable" data-edge="e8"><td><span class="n">8</span></td><td>Payment service</td><td>Stripe</td><td class="muted">not specified</td><td>Payment API call</td></tr>
+      <tr class="clickable" data-edge="e9"><td><span class="n">9</span></td><td>Checkout service</td><td>Postgres</td><td class="muted">not specified</td><td>Writes the order <span class="tag">gated</span></td></tr>
+      <tr class="clickable" data-edge="e10"><td><span class="n">10</span></td><td>Checkout service</td><td>Kafka</td><td class="muted">not specified</td><td>Publishes <code>order.created</code></td></tr>
+      <tr class="clickable" data-edge="e11"><td><span class="n">11</span></td><td>Kafka</td><td>Email service</td><td class="muted">not specified</td><td>Email service consumes <code>order.created</code> and sends the receipt</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="card" id="walkthrough">
+  <h2><span class="num">4</span>Walkthrough: one checkout</h2>
+  <p class="lede">Step through a single checkout. The active step is highlighted in the diagram above; scroll up or use the mini view at right.</p>
+
+  <div class="grid2">
+    <div>
+      <div class="controls">
+        <button id="prev" aria-label="Previous step">◀ Prev</button>
+        <button id="play" class="primary">▶ Play</button>
+        <button id="next" aria-label="Next step">Next ▶</button>
+        <div class="progress" aria-hidden="true"><i id="bar"></i></div>
+      </div>
+      <ol class="steps" id="steps">
+        <li data-edges="e1 e2" data-nodes="web mobile gw">
+          <div class="t">Customer submits checkout</div>
+          <div class="d">The Web app (browser) or the Mobile app sends the checkout request to the API gateway over HTTPS.</div>
+        </li>
+        <li data-edges="e3" data-nodes="gw checkout">
+          <div class="t">Gateway routes to Checkout</div>
+          <div class="d">The API gateway calls the Checkout service over gRPC.</div>
+        </li>
+        <li data-edges="e4 e5" data-nodes="checkout cart redis">
+          <div class="t">Load the cart</div>
+          <div class="d">The Checkout service loads the cart from the Cart service over gRPC. The Cart service keeps carts in Redis, the cart cache, which it reads and writes.</div>
+        </li>
+        <li data-edges="e6" data-nodes="checkout fraud">
+          <div class="t">Get a fraud score</div>
+          <div class="d">The Checkout service asks the Fraud service for a fraud score. The score must pass for the order to be written.</div>
+        </li>
+        <li data-edges="e7 e8" data-nodes="checkout payment stripe">
+          <div class="t">Charge the card</div>
+          <div class="d">The Checkout service asks the Payment service to charge the card; the Payment service makes the payment API call to Stripe. The charge must succeed for the order to be written.</div>
+        </li>
+        <li class="gated" data-edges="e9" data-nodes="checkout postgres">
+          <div class="t">Write the order <span class="tag">gated</span></div>
+          <div class="d">Only once the fraud score has passed <em>and</em> the charge has succeeded, the Checkout service writes the order to Postgres.</div>
+        </li>
+        <li data-edges="e10" data-nodes="checkout kafka">
+          <div class="t">Announce the order</div>
+          <div class="d">The Checkout service publishes <code>order.created</code> to Kafka.</div>
+        </li>
+        <li data-edges="e11" data-nodes="kafka email">
+          <div class="t">Send the receipt</div>
+          <div class="d">The Email service consumes <code>order.created</code> from Kafka and sends the receipt.</div>
+        </li>
+      </ol>
+    </div>
+
+    <div>
+      <div class="sticky-diagram">
+        <div class="diagram-wrap" id="miniWrap"></div>
+        <div class="rule" style="margin-top:16px">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#d97706" d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+          <div>
+            <strong>Not specified in the source material</strong>
+            Ask the team before assuming any of these:
+            <ul class="unknowns">
+              <li>Whether the fraud check happens before the charge, after it, or in parallel. Only the requirement that both pass before the order write is defined.</li>
+              <li>Whether <code>order.created</code> is published before or after the Postgres write.</li>
+              <li>What happens when the fraud score fails or the charge does not succeed, beyond the order not being written.</li>
+              <li>How the response travels back to the Web or Mobile app.</li>
+              <li>Protocols for connections other than the HTTPS and gRPC links listed.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>Checkout platform · architecture overview</footer>
+
+<script>
+(function(){
+  var EDGES = {
+    e1:['web','gw'], e2:['mobile','gw'], e3:['gw','checkout'], e4:['checkout','cart'],
+    e5:['cart','redis'], e6:['checkout','fraud'], e7:['checkout','payment'], e8:['payment','stripe'],
+    e9:['checkout','postgres'], e10:['checkout','kafka'], e11:['kafka','email']
+  };
+
+  var main = document.getElementById('arch');
+
+  // Mini copy of the diagram for the walkthrough panel
+  var mini = main.cloneNode(true);
+  mini.id = 'archMini';
+  mini.removeAttribute('aria-labelledby');
+  mini.setAttribute('aria-hidden','true');
+  mini.style.minWidth = '0';
+  Array.prototype.forEach.call(mini.querySelectorAll('[id]'), function(el){
+    if (/^e\d+$/.test(el.id)) { el.setAttribute('data-id', el.id); el.removeAttribute('id'); }
+    else if (el.tagName.toLowerCase() === 'title' || el.tagName.toLowerCase() === 'desc') { el.parentNode.removeChild(el); }
+    else if (el.tagName.toLowerCase() === 'marker') { el.id = el.id + '-m'; }
+  });
+  Array.prototype.forEach.call(mini.querySelectorAll('.edge'), function(p){ p.style.markerEnd = 'url(#arrow-m)'; });
+  var style = document.createElementNS('http://www.w3.org/2000/svg','style');
+  style.textContent = 'svg.focus .edge.on{marker-end:url(#arrow-on-m)!important}';
+  mini.insertBefore(style, mini.firstChild);
+  document.getElementById('miniWrap').appendChild(mini);
+
+  var svgs = [main, mini];
+
+  // Number badges + label backgrounds sized to text
+  svgs.forEach(function(svg){
+    Array.prototype.forEach.call(svg.querySelectorAll('.elabel'), function(g){
+      var texts = g.querySelectorAll('text');
+      var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      Array.prototype.forEach.call(texts, function(t){
+        var b = t.getBBox();
+        minX = Math.min(minX, b.x); maxX = Math.max(maxX, b.x + b.width);
+        minY = Math.min(minY, b.y); maxY = Math.max(maxY, b.y + b.height);
+      });
+      var num = g.getAttribute('data-edge').slice(1);
+      var padL = 26, padR = 9, padY = 4;
+      var r = g.querySelector('rect');
+      r.setAttribute('x', minX - padL); r.setAttribute('y', minY - padY);
+      r.setAttribute('width', (maxX - minX) + padL + padR);
+      r.setAttribute('height', (maxY - minY) + padY * 2);
+      r.setAttribute('rx', 9);
+      var cy = (minY + maxY) / 2;
+      var c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('class','edge-num-bg'); c.setAttribute('cx', minX - padL + 11); c.setAttribute('cy', cy); c.setAttribute('r', 8);
+      var n = document.createElementNS('http://www.w3.org/2000/svg','text');
+      n.setAttribute('class','edge-num'); n.setAttribute('x', minX - padL + 11); n.setAttribute('y', cy + 3.5);
+      n.textContent = num;
+      g.appendChild(c); g.appendChild(n);
+    });
+  });
+
+  function edgeEl(svg, id){ return svg.querySelector('#' + id) || svg.querySelector('[data-id="' + id + '"]'); }
+
+  function highlight(edgeIds, nodeIds){
+    svgs.forEach(function(svg){
+      clearSvg(svg);
+      if (!edgeIds.length && !nodeIds.length) return;
+      svg.classList.add('focus');
+      edgeIds.forEach(function(id){
+        var e = edgeEl(svg, id); if (e) e.classList.add('on');
+        var l = svg.querySelector('.elabel[data-edge="' + id + '"]'); if (l) l.classList.add('on');
+      });
+      nodeIds.forEach(function(n){
+        var g = svg.querySelector('.node[data-node="' + n + '"]'); if (g) g.classList.add('on');
+      });
+    });
+  }
+  function clearSvg(svg){
+    svg.classList.remove('focus');
+    Array.prototype.forEach.call(svg.querySelectorAll('.on'), function(el){ el.classList.remove('on'); });
+  }
+  function clearAll(){
+    svgs.forEach(clearSvg);
+    Array.prototype.forEach.call(document.querySelectorAll('tr.active'), function(r){ r.classList.remove('active'); });
+  }
+
+  function focusNode(n){
+    var edges = [], nodes = [n];
+    Object.keys(EDGES).forEach(function(id){
+      var pair = EDGES[id];
+      if (pair[0] === n || pair[1] === n){ edges.push(id); nodes.push(pair[0], pair[1]); }
+    });
+    highlight(edges, nodes);
+  }
+
+  // Node hover / tap
+  var pinned = null;
+  svgs.forEach(function(svg){
+    Array.prototype.forEach.call(svg.querySelectorAll('.node'), function(g){
+      var n = g.getAttribute('data-node');
+      g.addEventListener('mouseenter', function(){ if (!pinned) focusNode(n); });
+      g.addEventListener('mouseleave', function(){ if (!pinned) restore(); });
+      g.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        stopPlay();
+        if (pinned === n){ pinned = null; restore(); } else { pinned = n; setStep(-1, true); focusNode(n); }
+      });
+    });
+    svg.addEventListener('click', function(){ pinned = null; restore(); });
+  });
+
+  // Table rows
+  Array.prototype.forEach.call(document.querySelectorAll('tr.clickable'), function(tr){
+    tr.addEventListener('click', function(){
+      stopPlay(); setStep(-1, true);
+      var wasActive = tr.classList.contains('active');
+      clearAll(); pinned = null;
+      if (wasActive) return;
+      tr.classList.add('active');
+      var e = tr.getAttribute('data-edge'), n = tr.getAttribute('data-node');
+      if (e){ pinned = e; highlight([e], EDGES[e]); }
+      else if (n){ pinned = n; focusNode(n); }
+      main.scrollIntoView({behavior:'smooth', block:'center'});
+    });
+  });
+
+  // Walkthrough
+  var steps = Array.prototype.slice.call(document.querySelectorAll('#steps li'));
+  var current = -1, timer = null;
+  var bar = document.getElementById('bar'), playBtn = document.getElementById('play');
+
+  function setStep(i, silent){
+    current = i;
+    steps.forEach(function(li, k){ li.classList.toggle('active', k === i); });
+    bar.style.width = i < 0 ? '0' : ((i + 1) / steps.length * 100) + '%';
+    if (silent) return;
+    if (i < 0){ clearAll(); return; }
+    pinned = 'step';
+    Array.prototype.forEach.call(document.querySelectorAll('tr.active'), function(r){ r.classList.remove('active'); });
+    var li = steps[i];
+    highlight(li.getAttribute('data-edges').split(' '), li.getAttribute('data-nodes').split(' '));
+  }
+  function restore(){
+    if (current >= 0) setStep(current); else clearAll();
+  }
+  function stopPlay(){ if (timer){ clearInterval(timer); timer = null; playBtn.textContent = '▶ Play'; } }
+
+  steps.forEach(function(li, k){
+    li.addEventListener('click', function(){ stopPlay(); setStep(current === k ? -1 : k); if (current < 0) pinned = null; });
+  });
+  document.getElementById('next').addEventListener('click', function(){ stopPlay(); setStep(Math.min(current + 1, steps.length - 1)); });
+  document.getElementById('prev').addEventListener('click', function(){ stopPlay(); setStep(Math.max(current - 1, 0)); });
+  playBtn.addEventListener('click', function(){
+    if (timer){ stopPlay(); return; }
+    playBtn.textContent = '❚❚ Pause';
+    if (current >= steps.length - 1) current = -1;
+    setStep(current + 1);
+    timer = setInterval(function(){
+      if (current >= steps.length - 1){ stopPlay(); return; }
+      setStep(current + 1);
+    }, 2200);
+  });
+
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape'){ stopPlay(); pinned = null; setStep(-1); }
+    else if (e.key === 'ArrowRight' && current >= 0){ stopPlay(); setStep(Math.min(current + 1, steps.length - 1)); }
+    else if (e.key === 'ArrowLeft' && current >= 0){ stopPlay(); setStep(Math.max(current - 1, 0)); }
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checkout Platform — Architecture Overview</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --card: #ffffff;
+    --ink: #1e293b;
+    --muted: #64748b;
+    --line: #e2e8f0;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --warn: #b45309;
+    --warn-soft: #fef3c7;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+  }
+  header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
+    color: #fff;
+    padding: 40px 24px 36px;
+  }
+  header .wrap { max-width: 1200px; margin: 0 auto; }
+  header .eyebrow {
+    text-transform: uppercase; letter-spacing: .12em; font-size: 12px;
+    color: #93c5fd; font-weight: 600;
+  }
+  header h1 { margin: 6px 0 8px; font-size: 32px; letter-spacing: -.01em; }
+  header p { margin: 0; color: #cbd5e1; max-width: 760px; }
+  main { max-width: 1200px; margin: 0 auto; padding: 28px 24px 60px; }
+  section {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 24px 26px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 2px rgba(15,23,42,.04), 0 6px 20px rgba(15,23,42,.04);
+  }
+  h2 { margin: 0 0 6px; font-size: 21px; }
+  h2 + .sub { margin: 0 0 18px; color: var(--muted); font-size: 14px; }
+  .rule {
+    display: flex; gap: 14px; align-items: flex-start;
+    background: var(--warn-soft); border: 1px solid #fcd34d;
+    border-left: 5px solid #f59e0b;
+    border-radius: 10px; padding: 14px 18px; margin-top: 18px;
+  }
+  .rule .icon {
+    flex: 0 0 28px; height: 28px; border-radius: 50%;
+    background: #f59e0b; color: #fff; font-weight: 700;
+    display: grid; place-items: center; font-size: 15px;
+  }
+  .rule strong { color: var(--warn); }
+
+  /* Diagram */
+  .diagram-wrap {
+    border: 1px solid var(--line); border-radius: 12px;
+    background:
+      radial-gradient(circle, #e5e7eb 1px, transparent 1px) 0 0 / 22px 22px,
+      #fbfcfe;
+    padding: 10px; overflow-x: auto;
+  }
+  svg#arch { display: block; width: 100%; min-width: 900px; height: auto; }
+  .node rect { stroke-width: 1.6; transition: opacity .2s, stroke-width .2s; }
+  .node text { pointer-events: none; }
+  .node .name { font-size: 14px; font-weight: 650; fill: #0f172a; }
+  .node .desc { font-size: 11px; fill: #475569; }
+  .node { cursor: pointer; transition: opacity .2s; }
+  .node:hover rect, .node.hl rect { stroke-width: 2.6; }
+  .k-client rect   { fill: #e8f1ff; stroke: #3b82f6; }
+  .k-gateway rect  { fill: #f1ebff; stroke: #7c3aed; }
+  .k-service rect  { fill: #e6f7f3; stroke: #0f9f7a; }
+  .k-data rect     { fill: #fff4e0; stroke: #d97706; }
+  .k-bus rect      { fill: #fdeef4; stroke: #db2777; }
+  .k-external rect { fill: #f1f5f9; stroke: #64748b; }
+
+  .edge path {
+    fill: none; stroke: #94a3b8; stroke-width: 1.8;
+    stroke-linejoin: round; marker-end: url(#arr);
+    transition: stroke .2s, stroke-width .2s, opacity .2s;
+  }
+  .edge text {
+    font-size: 11.5px; fill: #475569; text-anchor: middle;
+    paint-order: stroke; stroke: #fbfcfe; stroke-width: 5px; stroke-linejoin: round;
+    transition: fill .2s;
+  }
+  .edge { transition: opacity .2s; }
+  .edge.hl path { stroke: var(--accent); stroke-width: 2.8; marker-end: url(#arr-hl); }
+  .edge.hl text { fill: #1d4ed8; font-weight: 700; }
+  svg.focus .edge:not(.hl) { opacity: .15; }
+  svg.focus .node:not(.hl) { opacity: .3; }
+  .zone-label { font-size: 11px; fill: #64748b; letter-spacing: .08em; text-transform: uppercase; font-weight: 600; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend i { width: 14px; height: 14px; border-radius: 4px; display: inline-block; border: 1.6px solid; }
+  .hint { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }
+  thead th {
+    text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); background: #f8fafc; padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  thead th:first-child { border-top-left-radius: 8px; }
+  thead th:last-child { border-top-right-radius: 8px; }
+  tbody td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr { transition: background .15s; cursor: pointer; }
+  tbody tr:hover, tbody tr.hl { background: var(--accent-soft); }
+  .tbl { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .num { color: var(--muted); font-variant-numeric: tabular-nums; width: 36px; }
+  .pill {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; background: #eef2ff; color: #3730a3;
+  }
+  .pill.none { background: #f1f5f9; color: #94a3b8; font-weight: 500; }
+  .muted { color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 960px) { .grid2 { grid-template-columns: 1fr; } }
+
+  /* Walkthrough */
+  .stepper { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  button {
+    font: inherit; font-size: 14px; font-weight: 600;
+    border: 1px solid #cbd5e1; background: #fff; color: var(--ink);
+    padding: 7px 14px; border-radius: 8px; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  button:hover { background: #f1f5f9; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:hover { background: #1d4ed8; }
+  button:disabled { opacity: .45; cursor: default; }
+  .counter { font-size: 13px; color: var(--muted); margin-left: auto; }
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  ol.steps li {
+    counter-increment: s; position: relative;
+    padding: 12px 14px 12px 54px; border: 1px solid var(--line); border-radius: 10px;
+    margin-bottom: 8px; cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 14px; top: 11px;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: #e2e8f0; color: #334155; font-weight: 700; font-size: 13px;
+    display: grid; place-items: center;
+  }
+  ol.steps li:hover { background: #f8fafc; }
+  ol.steps li.active { background: var(--accent-soft); border-color: #93c5fd; }
+  ol.steps li.active::before { background: var(--accent); color: #fff; }
+  ol.steps li.gate { border-left: 4px solid #f59e0b; }
+  ol.steps li b { color: #0f172a; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 12px; }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    font-size: 12.5px; background: #f1f5f9; padding: 1px 6px; border-radius: 5px; color: #be185d;
+  }
+  .sticky-diagram { position: sticky; top: 12px; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 0 0 30px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow">Architecture overview · New engineer onboarding</div>
+    <h1>Checkout Platform</h1>
+    <p>Twelve components, eleven connections, one business rule. Start with the diagram, then step through a single checkout to see how the pieces fit together.</p>
+  </div>
+</header>
+
+<main>
+
+  <section>
+    <h2>System diagram</h2>
+    <p class="sub">Every component and every connection, each connection labelled. Arrows point from the caller (or producer) to the callee (or consumer).</p>
+
+    <div class="diagram-wrap">
+      <svg id="arch" viewBox="0 0 1410 570" role="img" aria-labelledby="archTitle">
+        <title id="archTitle">Checkout platform architecture diagram</title>
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+          </marker>
+          <marker id="arr-hl" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+          </marker>
+          <filter id="shadow" x="-10%" y="-10%" width="120%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#0f172a" flood-opacity=".10"/>
+          </filter>
+        </defs>
+
+        <!-- External zone -->
+        <rect x="1205" y="232" width="190" height="116" rx="14" fill="none" stroke="#94a3b8" stroke-dasharray="6 5"/>
+        <text class="zone-label" x="1300" y="248" text-anchor="middle">External</text>
+
+        <!-- Edges -->
+        <g class="edge" id="e1" data-a="web" data-b="gw">
+          <path d="M180,180 H240 V275 H300"/>
+          <text x="210" y="172">HTTPS</text>
+        </g>
+        <g class="edge" id="e2" data-a="mobile" data-b="gw">
+          <path d="M180,400 H240 V305 H300"/>
+          <text x="210" y="392">HTTPS</text>
+        </g>
+        <g class="edge" id="e3" data-a="gw" data-b="checkout">
+          <path d="M450,290 H520"/>
+          <text x="485" y="282">gRPC</text>
+        </g>
+        <g class="edge" id="e4" data-a="checkout" data-b="cart">
+          <path d="M670,245 H700 V70 H880"/>
+          <text x="790" y="62">gRPC · loads the cart</text>
+        </g>
+        <g class="edge" id="e5" data-a="cart" data-b="redis">
+          <path d="M1050,70 H1220"/>
+          <text x="1135" y="62">reads and writes carts</text>
+        </g>
+        <g class="edge" id="e6" data-a="checkout" data-b="fraud">
+          <path d="M670,265 H720 V180 H880"/>
+          <text x="800" y="172">asks for a fraud score</text>
+        </g>
+        <g class="edge" id="e7" data-a="checkout" data-b="payment">
+          <path d="M670,290 H880"/>
+          <text x="790" y="282">charges the card</text>
+        </g>
+        <g class="edge" id="e8" data-a="payment" data-b="stripe">
+          <path d="M1050,290 H1220"/>
+          <text x="1135" y="282">payment API call</text>
+        </g>
+        <g class="edge" id="e9" data-a="checkout" data-b="pg">
+          <path d="M670,315 H720 V400 H880"/>
+          <text x="800" y="392">writes the order</text>
+        </g>
+        <g class="edge" id="e10" data-a="checkout" data-b="kafka">
+          <path d="M670,335 H700 V510 H880"/>
+          <text x="790" y="502">publishes order.created</text>
+        </g>
+        <g class="edge" id="e11" data-a="kafka" data-b="email">
+          <path d="M1050,510 H1220"/>
+          <text x="1135" y="488">consumes order.created</text>
+          <text x="1135" y="502">→ sends the receipt</text>
+        </g>
+
+        <!-- Nodes -->
+        <g class="node k-client" id="web" filter="url(#shadow)">
+          <rect x="30" y="150" width="150" height="60" rx="10"/>
+          <text class="name" x="105" y="176" text-anchor="middle">Web app</text>
+          <text class="desc" x="105" y="194" text-anchor="middle">browser</text>
+        </g>
+        <g class="node k-client" id="mobile" filter="url(#shadow)">
+          <rect x="30" y="370" width="150" height="60" rx="10"/>
+          <text class="name" x="105" y="405" text-anchor="middle">Mobile app</text>
+        </g>
+        <g class="node k-gateway" id="gw" filter="url(#shadow)">
+          <rect x="300" y="260" width="150" height="60" rx="10"/>
+          <text class="name" x="375" y="295" text-anchor="middle">API gateway</text>
+        </g>
+        <g class="node k-service" id="checkout" filter="url(#shadow)">
+          <rect x="520" y="230" width="150" height="120" rx="12"/>
+          <text class="name" x="595" y="286" text-anchor="middle">Checkout</text>
+          <text class="name" x="595" y="304" text-anchor="middle">service</text>
+        </g>
+        <g class="node k-service" id="cart" filter="url(#shadow)">
+          <rect x="880" y="40" width="170" height="60" rx="10"/>
+          <text class="name" x="965" y="75" text-anchor="middle">Cart service</text>
+        </g>
+        <g class="node k-service" id="fraud" filter="url(#shadow)">
+          <rect x="880" y="150" width="170" height="60" rx="10"/>
+          <text class="name" x="965" y="185" text-anchor="middle">Fraud service</text>
+        </g>
+        <g class="node k-service" id="payment" filter="url(#shadow)">
+          <rect x="880" y="260" width="170" height="60" rx="10"/>
+          <text class="name" x="965" y="295" text-anchor="middle">Payment service</text>
+        </g>
+        <g class="node k-data" id="pg" filter="url(#shadow)">
+          <rect x="880" y="370" width="170" height="60" rx="10"/>
+          <text class="name" x="965" y="396" text-anchor="middle">Postgres</text>
+          <text class="desc" x="965" y="414" text-anchor="middle">orders database</text>
+        </g>
+        <g class="node k-bus" id="kafka" filter="url(#shadow)">
+          <rect x="880" y="480" width="170" height="60" rx="10"/>
+          <text class="name" x="965" y="506" text-anchor="middle">Kafka</text>
+          <text class="desc" x="965" y="524" text-anchor="middle">event bus</text>
+        </g>
+        <g class="node k-data" id="redis" filter="url(#shadow)">
+          <rect x="1220" y="40" width="160" height="60" rx="10"/>
+          <text class="name" x="1300" y="66" text-anchor="middle">Redis</text>
+          <text class="desc" x="1300" y="84" text-anchor="middle">cart cache</text>
+        </g>
+        <g class="node k-external" id="stripe" filter="url(#shadow)">
+          <rect x="1220" y="260" width="160" height="60" rx="10"/>
+          <text class="name" x="1300" y="286" text-anchor="middle">Stripe</text>
+          <text class="desc" x="1300" y="304" text-anchor="middle">external payment provider</text>
+        </g>
+        <g class="node k-service" id="email" filter="url(#shadow)">
+          <rect x="1220" y="480" width="160" height="60" rx="10"/>
+          <text class="name" x="1300" y="515" text-anchor="middle">Email service</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="legend">
+      <span><i style="background:#e8f1ff;border-color:#3b82f6"></i>Client app</span>
+      <span><i style="background:#f1ebff;border-color:#7c3aed"></i>Gateway</span>
+      <span><i style="background:#e6f7f3;border-color:#0f9f7a"></i>Service</span>
+      <span><i style="background:#fff4e0;border-color:#d97706"></i>Data store / cache</span>
+      <span><i style="background:#fdeef4;border-color:#db2777"></i>Event bus</span>
+      <span><i style="background:#f1f5f9;border-color:#64748b"></i>External provider</span>
+    </div>
+    <p class="hint">Tip: hover a component to isolate its connections; hover a table row below to locate that connection.</p>
+
+    <div class="rule">
+      <div class="icon">!</div>
+      <div><strong>Business rule:</strong> an order is only written to Postgres <em>after</em> the fraud score passes <em>and</em> the charge succeeds.</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Reference tables</h2>
+    <p class="sub">The same information as the diagram, in tabular form. Protocols are shown only where the source specifies one.</p>
+    <div class="grid2">
+      <div>
+        <h3 style="margin:0 0 10px;font-size:15px">Components (12)</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Component</th><th>Description</th><th>Connects with</th></tr></thead>
+            <tbody>
+              <tr data-node="web"><td><b>Web app</b></td><td>Browser</td><td>→ API gateway</td></tr>
+              <tr data-node="mobile"><td><b>Mobile app</b></td><td class="muted">—</td><td>→ API gateway</td></tr>
+              <tr data-node="gw"><td><b>API gateway</b></td><td class="muted">—</td><td>← Web app, Mobile app<br>→ Checkout service</td></tr>
+              <tr data-node="checkout"><td><b>Checkout service</b></td><td class="muted">—</td><td>← API gateway<br>→ Cart, Fraud, Payment, Postgres, Kafka</td></tr>
+              <tr data-node="cart"><td><b>Cart service</b></td><td class="muted">—</td><td>← Checkout service<br>→ Redis</td></tr>
+              <tr data-node="fraud"><td><b>Fraud service</b></td><td class="muted">—</td><td>← Checkout service</td></tr>
+              <tr data-node="payment"><td><b>Payment service</b></td><td class="muted">—</td><td>← Checkout service<br>→ Stripe</td></tr>
+              <tr data-node="pg"><td><b>Postgres</b></td><td>Orders database</td><td>← Checkout service</td></tr>
+              <tr data-node="redis"><td><b>Redis</b></td><td>Cart cache</td><td>← Cart service</td></tr>
+              <tr data-node="kafka"><td><b>Kafka</b></td><td>Event bus</td><td>← Checkout service<br>→ Email service</td></tr>
+              <tr data-node="stripe"><td><b>Stripe</b></td><td>External payment provider</td><td>← Payment service</td></tr>
+              <tr data-node="email"><td><b>Email service</b></td><td class="muted">—</td><td>← Kafka</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div>
+        <h3 style="margin:0 0 10px;font-size:15px">Connections (11)</h3>
+        <div class="tbl">
+          <table>
+            <thead><tr><th class="num">#</th><th>From → To</th><th>Protocol</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr data-edge="e1"><td class="num">1</td><td>Web app → API gateway</td><td><span class="pill">HTTPS</span></td><td class="muted">—</td></tr>
+              <tr data-edge="e2"><td class="num">2</td><td>Mobile app → API gateway</td><td><span class="pill">HTTPS</span></td><td class="muted">—</td></tr>
+              <tr data-edge="e3"><td class="num">3</td><td>API gateway → Checkout service</td><td><span class="pill">gRPC</span></td><td class="muted">—</td></tr>
+              <tr data-edge="e4"><td class="num">4</td><td>Checkout service → Cart service</td><td><span class="pill">gRPC</span></td><td>Loads the cart</td></tr>
+              <tr data-edge="e5"><td class="num">5</td><td>Cart service → Redis</td><td><span class="pill none">not specified</span></td><td>Reads and writes carts</td></tr>
+              <tr data-edge="e6"><td class="num">6</td><td>Checkout service → Fraud service</td><td><span class="pill none">not specified</span></td><td>Asks for a fraud score</td></tr>
+              <tr data-edge="e7"><td class="num">7</td><td>Checkout service → Payment service</td><td><span class="pill none">not specified</span></td><td>Charges the card</td></tr>
+              <tr data-edge="e8"><td class="num">8</td><td>Payment service → Stripe</td><td><span class="pill none">not specified</span></td><td>Payment API call</td></tr>
+              <tr data-edge="e9"><td class="num">9</td><td>Checkout service → Postgres</td><td><span class="pill none">not specified</span></td><td>Writes the order</td></tr>
+              <tr data-edge="e10"><td class="num">10</td><td>Checkout service → Kafka</td><td><span class="pill none">not specified</span></td><td>Publishes <code>order.created</code></td></tr>
+              <tr data-edge="e11"><td class="num">11</td><td>Kafka → Email service</td><td><span class="pill none">not specified</span></td><td>Email service consumes <code>order.created</code> and sends the receipt</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="walk">
+    <h2>Walkthrough: one checkout</h2>
+    <p class="sub">Step through the request; the diagram above highlights the connections involved in each step.</p>
+
+    <div class="stepper">
+      <button id="prev">← Prev</button>
+      <button id="next" class="primary">Start →</button>
+      <button id="reset">Reset</button>
+      <span class="counter" id="counter">Not started</span>
+    </div>
+
+    <ol class="steps" id="steps">
+      <li data-edges="e1,e2" data-nodes="web,mobile,gw">
+        <b>Customer checks out.</b> The request leaves the Web app (browser) or the Mobile app and reaches the API gateway over HTTPS.
+      </li>
+      <li data-edges="e3" data-nodes="gw,checkout">
+        <b>Gateway hands off.</b> The API gateway calls the Checkout service over gRPC.
+      </li>
+      <li data-edges="e4,e5" data-nodes="checkout,cart,redis">
+        <b>Cart is loaded.</b> The Checkout service loads the cart from the Cart service over gRPC; the Cart service reads carts from Redis, the cart cache.
+      </li>
+      <li data-edges="e6" data-nodes="checkout,fraud">
+        <b>Fraud check.</b> The Checkout service asks the Fraud service for a fraud score.
+      </li>
+      <li data-edges="e7,e8" data-nodes="checkout,payment,stripe">
+        <b>Card is charged.</b> The Checkout service asks the Payment service to charge the card; the Payment service makes the payment API call to Stripe.
+      </li>
+      <li class="gate" data-edges="e9" data-nodes="checkout,pg">
+        <b>Order is written — only if allowed.</b> If, and only if, the fraud score passed <em>and</em> the charge succeeded, the Checkout service writes the order to Postgres.
+      </li>
+      <li data-edges="e10" data-nodes="checkout,kafka">
+        <b>Event is published.</b> The Checkout service publishes <code>order.created</code> to Kafka.
+      </li>
+      <li data-edges="e11" data-nodes="kafka,email">
+        <b>Receipt is sent.</b> The Email service consumes <code>order.created</code> from Kafka and sends the receipt.
+      </li>
+    </ol>
+    <p class="note">Ordering note: the source material fixes one ordering constraint — the order write happens after both a passing fraud score and a successful charge. It does not specify whether the fraud check or the charge happens first, so steps 4 and 5 are listed in a readable order, not a guaranteed one.</p>
+  </section>
+
+</main>
+
+<footer>Checkout platform · architecture overview</footer>
+
+<script>
+(function () {
+  var svg = document.getElementById('arch');
+  var edges = Array.prototype.slice.call(svg.querySelectorAll('.edge'));
+  var nodes = Array.prototype.slice.call(svg.querySelectorAll('.node'));
+  var steps = Array.prototype.slice.call(document.querySelectorAll('#steps li'));
+  var prevBtn = document.getElementById('prev');
+  var nextBtn = document.getElementById('next');
+  var resetBtn = document.getElementById('reset');
+  var counter = document.getElementById('counter');
+  var current = -1;
+
+  function highlight(edgeIds, nodeIds) {
+    var active = edgeIds.length > 0 || nodeIds.length > 0;
+    svg.classList.toggle('focus', active);
+    edges.forEach(function (e) { e.classList.toggle('hl', edgeIds.indexOf(e.id) !== -1); });
+    nodes.forEach(function (n) { n.classList.toggle('hl', nodeIds.indexOf(n.id) !== -1); });
+  }
+
+  function restore() {
+    if (current >= 0) {
+      var li = steps[current];
+      highlight(li.dataset.edges.split(','), li.dataset.nodes.split(','));
+    } else {
+      highlight([], []);
+    }
+  }
+
+  function neighbours(id) {
+    var es = [], ns = [id];
+    edges.forEach(function (e) {
+      if (e.dataset.a === id || e.dataset.b === id) {
+        es.push(e.id);
+        ns.push(e.dataset.a === id ? e.dataset.b : e.dataset.a);
+      }
+    });
+    return { edges: es, nodes: ns };
+  }
+
+  nodes.forEach(function (n) {
+    n.addEventListener('mouseenter', function () {
+      var r = neighbours(n.id); highlight(r.edges, r.nodes);
+    });
+    n.addEventListener('mouseleave', restore);
+  });
+
+  document.querySelectorAll('tr[data-edge]').forEach(function (tr) {
+    tr.addEventListener('mouseenter', function () {
+      var e = document.getElementById(tr.dataset.edge);
+      highlight([e.id], [e.dataset.a, e.dataset.b]);
+    });
+    tr.addEventListener('mouseleave', restore);
+  });
+
+  document.querySelectorAll('tr[data-node]').forEach(function (tr) {
+    tr.addEventListener('mouseenter', function () {
+      var r = neighbours(tr.dataset.node); highlight(r.edges, r.nodes);
+    });
+    tr.addEventListener('mouseleave', restore);
+  });
+
+  function go(i) {
+    current = i;
+    steps.forEach(function (li, k) { li.classList.toggle('active', k === i); });
+    prevBtn.disabled = i <= 0;
+    nextBtn.disabled = i >= steps.length - 1;
+    nextBtn.textContent = i < 0 ? 'Start →' : 'Next →';
+    counter.textContent = i < 0 ? 'Not started' : 'Step ' + (i + 1) + ' of ' + steps.length;
+    restore();
+  }
+
+  steps.forEach(function (li, k) {
+    li.addEventListener('click', function () { go(k); });
+  });
+  prevBtn.addEventListener('click', function () { if (current > 0) go(current - 1); });
+  nextBtn.addEventListener('click', function () { if (current < steps.length - 1) go(current + 1); });
+  resetBtn.addEventListener('click', function () { go(-1); });
+  document.addEventListener('keydown', function (ev) {
+    if (current < 0) return;
+    if (ev.key === 'ArrowRight' && current < steps.length - 1) go(current + 1);
+    if (ev.key === 'ArrowLeft' && current > 0) go(current - 1);
+  });
+
+  go(-1);
+})();
+</script>
+</body>
+</html>

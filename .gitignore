@@ -1,0 +1,6 @@
+# raw claude -p event streams contain local paths and session ids
+bench/results/**/*.raw.json
+bench/results/_v1-bad-accounting/
+bench/*.log
+node_modules/
+__pycache__/

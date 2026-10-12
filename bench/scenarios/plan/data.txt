@@ -1,0 +1,22 @@
+Requirements (from the product manager):
+
+We need a Python module pricing.py with one function:
+quote(cart, region, coupon=None, member=False) -> dict
+
+A cart is a list of items. Each item is a dict with "sku" (str), "price" (int, cents), "qty" (int) and "category" (str). All money is in integer cents, in and out. The function returns a dict with exactly these int keys: subtotal, discount, shipping, tax, total.
+
+Validation comes first, before anything else. If region is not one of "US", "EU", "UK", raise ValueError("unsupported region"). If any item has qty below 1, raise ValueError("invalid qty"). After validation, an empty cart returns all five values as 0.
+
+subtotal is the sum of price times qty over all items. Gift cards (category "gift-card") count toward the subtotal, but they are never discounted and never taxed. Call the subtotal of all non-gift-card items the eligible amount.
+
+Coupons are optional. Codes are case-insensitive and surrounding whitespace is ignored. "SAVE10" takes 10 percent off the eligible amount. "FLAT500" takes 500 cents off, but only when the eligible amount is at least 3000 cents; below that it gives nothing. Any other code raises ValueError("unknown coupon").
+
+Members get an extra 5 percent off, applied after the coupon, on the eligible amount minus the coupon discount. The discount value we return is the coupon discount plus the member discount.
+
+Shipping is free for members, and free for everyone when subtotal minus discount is 5000 cents or more. Otherwise it is 599 cents in the US and 899 cents in the EU and the UK.
+
+Tax is charged on (eligible amount minus discount plus shipping). Rates: US 7 percent, EU 20 percent, UK 20 percent.
+
+Rounding: every percentage result (the SAVE10 discount, the member discount, the tax) is rounded half up to a whole cent at the moment it is computed. Note that Python's round() is not half up.
+
+total = subtotal - discount + shipping + tax.

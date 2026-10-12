@@ -1,0 +1,1 @@
+Build the triage board for tomorrow's planning meeting. The team drags each ticket into Now, Next, Later or Cut, then exports the result as markdown to paste into the next prompt. Use only the tickets below, invent nothing.

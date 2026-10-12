@@ -1,0 +1,15 @@
+System: checkout platform.
+Components: Web app (browser), Mobile app, API gateway, Checkout service, Cart service, Payment service, Fraud service, Postgres (orders database), Redis (cart cache), Kafka (event bus), Stripe (external payment provider), Email service.
+Connections:
+- Web app to API gateway: HTTPS
+- Mobile app to API gateway: HTTPS
+- API gateway to Checkout service: gRPC
+- Checkout service to Cart service: gRPC, loads the cart
+- Cart service to Redis: reads and writes carts
+- Checkout service to Fraud service: asks for a fraud score
+- Checkout service to Payment service: charges the card
+- Payment service to Stripe: payment API call
+- Checkout service to Postgres: writes the order
+- Checkout service to Kafka: publishes order.created
+- Kafka to Email service: Email service consumes order.created and sends the receipt
+Rule: an order is only written after the fraud score passes and the charge succeeds.

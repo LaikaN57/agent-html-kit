@@ -1,0 +1,1 @@
+Write the weekly status report for an engineering manager. Include the headline numbers, a chart of PRs merged per day, a table of all work items with their status, the risks, and next week. Use only the data below, invent nothing.

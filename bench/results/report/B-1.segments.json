@@ -1,0 +1,16 @@
+{
+ "css": 2774,
+ "js": 992,
+ "svg": 890,
+ "body_with_attrs": 2126,
+ "body_bare_tags": 1578,
+ "text_only": 729,
+ "chars": {
+  "css": 6074,
+  "js": 2262,
+  "svg": 2021,
+  "body_with_attrs": 5298,
+  "body_bare_tags": 3659,
+  "text_only": 2010
+ }
+}

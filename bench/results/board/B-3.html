@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Triage board · CHK-201 to CHK-220</title>
+<style>
+  :root {
+    --bg: #f3f4f7;
+    --panel: #ffffff;
+    --ink: #1c2230;
+    --ink-2: #4a5468;
+    --ink-3: #8a93a6;
+    --line: #e2e5ec;
+    --shadow: 0 1px 2px rgba(20, 28, 45, .06), 0 2px 8px rgba(20, 28, 45, .05);
+    --shadow-lift: 0 8px 24px rgba(20, 28, 45, .18);
+    --c-inbox: #94a3b8;
+    --c-now: #e5484d;
+    --c-next: #f59e0b;
+    --c-later: #3b82f6;
+    --c-cut: #52525b;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    min-height: 100vh;
+    padding: 24px clamp(12px, 3vw, 36px) 32px;
+  }
+  button { font: inherit; }
+
+  /* Header */
+  .top {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 16px; margin-bottom: 18px;
+  }
+  .top h1 { margin: 0; font-size: 24px; letter-spacing: -.01em; }
+  .top .sub { margin: 4px 0 0; color: var(--ink-2); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600;
+    box-shadow: var(--shadow); transition: background .15s, border-color .15s, transform .05s;
+  }
+  .btn:hover { border-color: #c8cdd8; background: #fafbfc; }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: #1f2a44; border-color: #1f2a44; color: #fff; }
+  .btn.primary:hover { background: #2b3a5c; }
+  .btn.ghost { box-shadow: none; background: transparent; color: var(--ink-2); }
+  .btn:focus-visible, .card:focus-visible, .moves button:focus-visible {
+    outline: 2px solid #3b82f6; outline-offset: 2px;
+  }
+
+  /* Summary */
+  .summary {
+    display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px 18px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 14px 18px; box-shadow: var(--shadow); margin-bottom: 18px;
+  }
+  .progress-text { font-size: 15px; color: var(--ink-2); white-space: nowrap; }
+  .progress-text strong { color: var(--ink); font-size: 20px; }
+  .progress-text.complete strong, .progress-text.complete { color: #15803d; }
+  .bar-wrap { border-radius: 7px; overflow: hidden; height: 14px; background: #eceef3; }
+  .bar-wrap svg { display: block; width: 100%; height: 14px; }
+  .legend {
+    grid-column: 1 / -1; list-style: none; margin: 0; padding: 0;
+    display: flex; flex-wrap: wrap; gap: 6px 18px; color: var(--ink-2); font-size: 13px;
+  }
+  .legend li { display: flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* Board */
+  .board {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: start;
+  }
+  @media (max-width: 1180px) {
+    .board { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .col[data-lane="inbox"] { grid-column: 1 / -1; }
+    .col[data-lane="inbox"] .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  }
+  @media (max-width: 760px) {
+    .board { grid-template-columns: 1fr; }
+    .col[data-lane="inbox"] .list { display: flex; }
+  }
+  .col {
+    background: #e9ebf0; border-radius: var(--radius); border-top: 4px solid var(--c);
+    padding: 10px; transition: background .15s, box-shadow .15s;
+    min-height: 180px; display: flex; flex-direction: column;
+  }
+  .col.over { background: #dfe4ee; box-shadow: inset 0 0 0 2px var(--c); }
+  .col-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 2px 4px 10px;
+  }
+  .col-head h2 { margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; }
+  .col-head .key { color: var(--ink-3); font-size: 12px; font-weight: 500; margin-left: 6px; text-transform: none; letter-spacing: 0; }
+  .count {
+    background: var(--panel); color: var(--ink); border-radius: 999px; min-width: 26px;
+    text-align: center; padding: 1px 8px; font-weight: 700; font-size: 12px;
+    font-variant-numeric: tabular-nums; box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .list { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 120px; }
+  .list:empty {
+    border: 2px dashed #c9ced9; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .list:empty::before { content: "Drop tickets here"; color: var(--ink-3); font-size: 13px; }
+  .col[data-lane="inbox"] .list:empty::before { content: "All tickets triaged ✓"; color: #15803d; font-weight: 600; }
+
+  /* Cards */
+  .card {
+    background: var(--panel); border-radius: 8px; box-shadow: var(--shadow);
+    border: 1px solid var(--line); border-left: 3px solid var(--c, var(--c-inbox));
+    padding: 9px 10px 8px; cursor: grab; user-select: none;
+    transition: box-shadow .15s, transform .15s, opacity .15s;
+  }
+  .card:hover { box-shadow: 0 2px 4px rgba(20,28,45,.08), 0 6px 14px rgba(20,28,45,.08); }
+  .card:active { cursor: grabbing; }
+  .card.dragging { opacity: .45; box-shadow: var(--shadow-lift); transform: rotate(.6deg); }
+  .card[data-lane="inbox"] { --c: var(--c-inbox); }
+  .card[data-lane="now"]   { --c: var(--c-now); }
+  .card[data-lane="next"]  { --c: var(--c-next); }
+  .card[data-lane="later"] { --c: var(--c-later); }
+  .card[data-lane="cut"]   { --c: var(--c-cut); background: #f7f7f8; }
+  .card[data-lane="cut"] .ctitle { text-decoration: line-through; color: var(--ink-3); }
+  .card-main { display: flex; gap: 8px; align-items: flex-start; }
+  .grip { color: #b7bdc9; font-size: 12px; line-height: 18px; letter-spacing: -2px; padding-top: 1px; }
+  .cid { font: 600 11.5px/1.3 ui-monospace, "SFMono-Regular", Consolas, Menlo, monospace; color: var(--ink-2); }
+  .ctitle { font-weight: 500; margin-top: 1px; }
+
+  .moves {
+    display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; padding-left: 18px;
+    max-height: 0; overflow: hidden; opacity: 0; transition: opacity .12s, max-height .12s;
+  }
+  .card:hover .moves, .card:focus-within .moves, .card:focus .moves { max-height: 40px; opacity: 1; }
+  @media (hover: none) { .moves { max-height: 40px; opacity: 1; } }
+  .moves button {
+    border: 1px solid var(--line); background: #f8f9fb; color: var(--ink-2);
+    border-radius: 6px; padding: 1px 8px; font-size: 12px; cursor: pointer; font-weight: 600;
+  }
+  .moves button:hover { background: #eef1f6; color: var(--ink); }
+  .moves button[data-to="now"]   { border-color: #f5c2c3; }
+  .moves button[data-to="next"]  { border-color: #f8dba5; }
+  .moves button[data-to="later"] { border-color: #bcd3fb; }
+  .moves button[data-to="cut"]   { border-color: #cfcfd4; }
+  .card[data-lane="inbox"] [data-to="inbox"],
+  .card[data-lane="now"]   [data-to="now"],
+  .card[data-lane="next"]  [data-to="next"],
+  .card[data-lane="later"] [data-to="later"],
+  .card[data-lane="cut"]   [data-to="cut"] { display: none; }
+
+  .hint { margin-top: 20px; color: var(--ink-3); font-size: 12.5px; text-align: center; }
+  kbd {
+    font: 600 11px ui-monospace, Consolas, monospace; background: var(--panel);
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--ink-2);
+  }
+
+  /* Export dialog */
+  dialog {
+    border: none; border-radius: 14px; padding: 0; width: min(720px, 94vw);
+    box-shadow: 0 24px 64px rgba(10, 15, 30, .35); color: var(--ink);
+  }
+  dialog::backdrop { background: rgba(18, 24, 38, .45); }
+  .dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+  .dlg-head h3 { margin: 0; font-size: 16px; }
+  .dlg-head p { margin: 2px 0 0; color: var(--ink-2); font-size: 13px; }
+  .dlg-body { padding: 16px 20px; }
+  .dlg-body textarea {
+    width: 100%; height: 340px; resize: vertical; border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px; background: #fafbfc; color: var(--ink);
+    font: 13px/1.5 ui-monospace, "SFMono-Regular", Consolas, Menlo, monospace;
+  }
+  .warn { margin: 0 0 10px; padding: 8px 12px; border-radius: 8px; background: #fff7e6; color: #8a5a00; font-size: 13px; border: 1px solid #f6dfa8; }
+  .warn[hidden] { display: none; }
+  .dlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 0 20px 18px; }
+  .x { border: none; background: transparent; font-size: 22px; line-height: 1; cursor: pointer; color: var(--ink-3); padding: 4px 8px; border-radius: 6px; }
+  .x:hover { background: #f1f3f6; color: var(--ink); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px);
+    background: #1f2a44; color: #fff; padding: 9px 16px; border-radius: 999px;
+    font-weight: 600; font-size: 13px; opacity: 0; pointer-events: none;
+    transition: opacity .2s, transform .2s; box-shadow: var(--shadow-lift);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div>
+    <h1>Triage board</h1>
+    <p class="sub">20 tickets, CHK-201 to CHK-220. Drag each one into Now, Next, Later or Cut, then export as markdown.</p>
+  </div>
+  <div class="actions">
+    <button type="button" id="resetBtn" class="btn ghost">Reset board</button>
+    <button type="button" id="copyBtn" class="btn">Copy markdown</button>
+    <button type="button" id="exportBtn" class="btn primary">Export markdown</button>
+  </div>
+</header>
+
+<section class="summary" aria-label="Triage progress">
+  <div class="progress-text" id="progress"><strong id="sortedCount">0</strong> of 20 sorted</div>
+  <div class="bar-wrap">
+    <svg id="dist" viewBox="0 0 1000 14" preserveAspectRatio="none" role="img" aria-label="Distribution of tickets across lanes">
+      <g id="segs"></g>
+    </svg>
+  </div>
+  <ul class="legend" id="legend"></ul>
+</section>
+
+<main class="board" id="board"></main>
+
+<p class="hint">
+  Keyboard: focus a card, then press <kbd>1</kbd> Now · <kbd>2</kbd> Next · <kbd>3</kbd> Later · <kbd>4</kbd> Cut · <kbd>0</kbd> Unsorted · <kbd>↑</kbd>/<kbd>↓</kbd> reorder within a lane.
+  Order within a lane is kept in the export. The board is saved in this browser.
+</p>
+
+<dialog id="exportDlg" aria-labelledby="dlgTitle">
+  <div class="dlg-head">
+    <div>
+      <h3 id="dlgTitle">Markdown export</h3>
+      <p>Paste this into the next prompt.</p>
+    </div>
+    <button type="button" class="x" id="closeDlg" aria-label="Close">×</button>
+  </div>
+  <div class="dlg-body">
+    <p class="warn" id="unsortedWarn" hidden></p>
+    <textarea id="mdOut" readonly spellcheck="false" aria-label="Markdown output"></textarea>
+  </div>
+  <div class="dlg-foot">
+    <button type="button" class="btn ghost" id="downloadBtn">Download .md</button>
+    <button type="button" class="btn primary" id="dlgCopyBtn">Copy to clipboard</button>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  const TICKETS = [
+    ["CHK-201", "Saved cards for returning customers"],
+    ["CHK-202", "Split payments across two cards"],
+    ["CHK-203", "Klarna pay-later option"],
+    ["CHK-204", "Fix double-click on Place order"],
+    ["CHK-205", "Address autocomplete for the EU"],
+    ["CHK-206", "Show delivery date before payment"],
+    ["CHK-207", "Gift message field"],
+    ["CHK-208", "Cart abandonment email"],
+    ["CHK-209", "PayPal express button"],
+    ["CHK-210", "Remove legacy coupon service"],
+    ["CHK-211", "3-D Secure retry flow"],
+    ["CHK-212", "Currency switcher"],
+    ["CHK-213", "Order summary redesign"],
+    ["CHK-214", "Rate limit the coupon endpoint"],
+    ["CHK-215", "Guest checkout A/B readout"],
+    ["CHK-216", "Accessibility audit fixes"],
+    ["CHK-217", "Apple Pay on Android Chrome"],
+    ["CHK-218", "UK VAT calculation"],
+    ["CHK-219", "Fraud rules dashboard"],
+    ["CHK-220", "Retire the v1 checkout API"]
+  ];
+  const TITLE = Object.fromEntries(TICKETS);
+  const IDS = TICKETS.map(t => t[0]);
+  const TOTAL = IDS.length;
+
+  const COLUMNS = [
+    { key: "inbox", label: "Unsorted", hot: "0", color: "var(--c-inbox)", hex: "#94a3b8" },
+    { key: "now",   label: "Now",      hot: "1", color: "var(--c-now)",   hex: "#e5484d" },
+    { key: "next",  label: "Next",     hot: "2", color: "var(--c-next)",  hex: "#f59e0b" },
+    { key: "later", label: "Later",    hot: "3", color: "var(--c-later)", hex: "#3b82f6" },
+    { key: "cut",   label: "Cut",      hot: "4", color: "var(--c-cut)",   hex: "#52525b" }
+  ];
+  const LANES = COLUMNS.filter(c => c.key !== "inbox");
+  const BY_KEY = Object.fromEntries(COLUMNS.map(c => [c.key, c]));
+  const BY_HOT = Object.fromEntries(COLUMNS.map(c => [c.hot, c.key]));
+  const STORAGE_KEY = "triage-board:CHK-201-220:v1";
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+
+  /* ---------- State ---------- */
+  function freshState() {
+    const s = {};
+    COLUMNS.forEach(c => { s[c.key] = []; });
+    s.inbox = IDS.slice();
+    return s;
+  }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORAGE_KEY));
+      if (!s) return freshState();
+      const seen = [];
+      for (const c of COLUMNS) {
+        if (!Array.isArray(s[c.key])) return freshState();
+        seen.push(...s[c.key]);
+      }
+      const valid = seen.length === TOTAL && new Set(seen).size === TOTAL && seen.every(id => TITLE[id]);
+      return valid ? s : freshState();
+    } catch (e) {
+      return freshState();
+    }
+  }
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) { /* storage unavailable */ }
+  }
+  let state = load();
+
+  /* ---------- Build board ---------- */
+  const board = $("board");
+  const lists = {}, counts = {}, cols = {}, cards = {};
+
+  COLUMNS.forEach(c => {
+    const col = document.createElement("section");
+    col.className = "col";
+    col.dataset.lane = c.key;
+    col.style.setProperty("--c", c.color);
+    col.setAttribute("aria-label", c.label);
+    col.innerHTML =
+      '<div class="col-head"><h2>' + esc(c.label) + '<span class="key">key ' + c.hot + '</span></h2>' +
+      '<span class="count" aria-label="tickets">0</span></div>' +
+      '<div class="list" role="list"></div>';
+    board.appendChild(col);
+    cols[c.key] = col;
+    lists[c.key] = col.querySelector(".list");
+    counts[c.key] = col.querySelector(".count");
+    wireDropZone(col, c.key);
+  });
+
+  IDS.forEach(id => {
+    const el = document.createElement("article");
+    el.className = "card";
+    el.draggable = true;
+    el.tabIndex = 0;
+    el.dataset.id = id;
+    el.setAttribute("role", "listitem");
+    el.setAttribute("aria-label", id + " " + TITLE[id]);
+    el.innerHTML =
+      '<div class="card-main"><span class="grip" aria-hidden="true">⋮⋮</span><div>' +
+      '<div class="cid">' + esc(id) + '</div><div class="ctitle">' + esc(TITLE[id]) + '</div></div></div>' +
+      '<div class="moves" role="group" aria-label="Move ' + esc(id) + '">' +
+      COLUMNS.map(c =>
+        '<button type="button" draggable="false" data-to="' + c.key + '" title="Move to ' + c.label + ' (' + c.hot + ')">' +
+        (c.key === "inbox" ? "↩ Unsorted" : esc(c.label)) + '</button>'
+      ).join("") +
+      '</div>';
+    wireCard(el);
+    cards[id] = el;
+  });
+
+  /* ---------- Render ---------- */
+  function render() {
+    COLUMNS.forEach(c => {
+      const frag = document.createDocumentFragment();
+      state[c.key].forEach(id => {
+        cards[id].dataset.lane = c.key;
+        frag.appendChild(cards[id]);
+      });
+      lists[c.key].replaceChildren(frag);
+      counts[c.key].textContent = state[c.key].length;
+    });
+    const sorted = TOTAL - state.inbox.length;
+    $("sortedCount").textContent = sorted;
+    $("progress").classList.toggle("complete", sorted === TOTAL);
+    drawDistribution();
+  }
+
+  function drawDistribution() {
+    const NS = "http://www.w3.org/2000/svg";
+    const segs = $("segs");
+    segs.replaceChildren();
+    let x = 0;
+    const order = LANES.concat(BY_KEY.inbox);
+    const parts = [];
+    order.forEach(c => {
+      const n = state[c.key].length;
+      parts.push(c.label + " " + n);
+      if (!n) return;
+      const w = (n / TOTAL) * 1000;
+      const r = document.createElementNS(NS, "rect");
+      r.setAttribute("x", x);
+      r.setAttribute("y", 0);
+      r.setAttribute("width", w);
+      r.setAttribute("height", 14);
+      r.setAttribute("fill", c.key === "inbox" ? "#d5dae3" : c.hex);
+      r.setAttribute("stroke", "#ffffff");
+      r.setAttribute("stroke-width", "2");
+      r.setAttribute("vector-effect", "non-scaling-stroke");
+      const t = document.createElementNS(NS, "title");
+      t.textContent = c.label + ": " + n + " of " + TOTAL;
+      r.appendChild(t);
+      segs.appendChild(r);
+      x += w;
+    });
+    $("dist").setAttribute("aria-label", "Distribution: " + parts.join(", "));
+    $("legend").innerHTML = order.map(c =>
+      '<li><span class="sw" style="background:' + (c.key === "inbox" ? "#d5dae3" : c.hex) + '"></span>' +
+      esc(c.label) + ' <b>' + state[c.key].length + '</b></li>'
+    ).join("");
+  }
+
+  /* ---------- Moves ---------- */
+  function laneOf(id) {
+    return COLUMNS.find(c => state[c.key].includes(id)).key;
+  }
+  function moveTo(id, to) {
+    COLUMNS.forEach(c => {
+      const i = state[c.key].indexOf(id);
+      if (i > -1) state[c.key].splice(i, 1);
+    });
+    state[to].push(id);
+    commit(id);
+  }
+  function commit(focusId) {
+    save();
+    render();
+    if (focusId) cards[focusId].focus();
+  }
+
+  /* ---------- Drag and drop ---------- */
+  let dragId = null;
+  let dropped = false;
+
+  function wireCard(el) {
+    el.addEventListener("dragstart", e => {
+      dragId = el.dataset.id;
+      dropped = false;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", dragId);
+      requestAnimationFrame(() => el.classList.add("dragging"));
+    });
+    el.addEventListener("dragend", () => {
+      el.classList.remove("dragging");
+      Object.values(cols).forEach(c => c.classList.remove("over"));
+      if (dropped) {
+        COLUMNS.forEach(c => {
+          state[c.key] = Array.from(lists[c.key].children).map(n => n.dataset.id);
+        });
+        save();
+      }
+      render(); // also reverts the live preview if the drag was cancelled
+      dragId = null;
+    });
+  }
+
+  function getAfter(list, y) {
+    for (const c of list.querySelectorAll(".card:not(.dragging)")) {
+      const r = c.getBoundingClientRect();
+      if (y < r.top + r.height / 2) return c;
+    }
+    return null;
+  }
+
+  function wireDropZone(col, key) {
+    col.addEventListener("dragover", e => {
+      if (!dragId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      col.classList.add("over");
+      const list = lists[key];
+      const el = cards[dragId];
+      const after = getAfter(list, e.clientY);
+      if (after === null) {
+        if (list.lastElementChild !== el) list.appendChild(el);
+      } else if (after !== el && el.nextElementSibling !== after) {
+        list.insertBefore(el, after);
+      }
+    });
+    col.addEventListener("dragleave", e => {
+      if (!col.contains(e.relatedTarget)) col.classList.remove("over");
+    });
+    col.addEventListener("drop", e => {
+      if (!dragId) return;
+      e.preventDefault();
+      dropped = true;
+      col.classList.remove("over");
+    });
+  }
+
+  /* ---------- Buttons and keyboard ---------- */
+  board.addEventListener("click", e => {
+    const b = e.target.closest("button[data-to]");
+    if (!b) return;
+    const id = b.closest(".card").dataset.id;
+    moveTo(id, b.dataset.to);
+    toast(id + " → " + BY_KEY[b.dataset.to].label);
+  });
+
+  board.addEventListener("keydown", e => {
+    const card = e.target;
+    if (!card.classList || !card.classList.contains("card")) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const id = card.dataset.id;
+    const to = BY_HOT[e.key];
+    if (to) {
+      e.preventDefault();
+      if (laneOf(id) !== to) {
+        moveTo(id, to);
+        toast(id + " → " + BY_KEY[to].label);
+      }
+      return;
+    }
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const arr = state[laneOf(id)];
+      const i = arr.indexOf(id);
+      const j = i + (e.key === "ArrowUp" ? -1 : 1);
+      if (j < 0 || j >= arr.length) return;
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+      commit(id);
+    }
+  });
+
+  /* ---------- Markdown export ---------- */
+  function toMarkdown() {
+    const lines = ["# Triage", ""];
+    LANES.forEach(c => {
+      const ids = state[c.key];
+      lines.push("## " + c.label + " (" + ids.length + ")");
+      if (!ids.length) lines.push("_None_");
+      ids.forEach(id => lines.push("- " + id + " " + TITLE[id]));
+      lines.push("");
+    });
+    if (state.inbox.length) {
+      lines.push("## Unsorted (" + state.inbox.length + ")");
+      state.inbox.forEach(id => lines.push("- " + id + " " + TITLE[id]));
+      lines.push("");
+    }
+    return lines.join("\n").trim() + "\n";
+  }
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (_) { ok = false; }
+      ta.remove();
+      return ok;
+    }
+  }
+
+  async function copyMarkdown() {
+    const ok = await copyText(toMarkdown());
+    const n = state.inbox.length;
+    if (!ok) toast("Copy failed. Use Export and copy manually.");
+    else toast(n ? "Copied. " + n + " unsorted ticket" + (n === 1 ? "" : "s") + " listed separately." : "Markdown copied");
+  }
+
+  const dlg = $("exportDlg");
+  $("exportBtn").addEventListener("click", () => {
+    $("mdOut").value = toMarkdown();
+    const n = state.inbox.length;
+    const warn = $("unsortedWarn");
+    warn.hidden = n === 0;
+    warn.textContent = n + " ticket" + (n === 1 ? " is" : "s are") + " still unsorted and will appear under “Unsorted”.";
+    dlg.showModal();
+    $("mdOut").focus();
+    $("mdOut").select();
+  });
+  $("closeDlg").addEventListener("click", () => dlg.close());
+  dlg.addEventListener("click", e => { if (e.target === dlg) dlg.close(); });
+  $("dlgCopyBtn").addEventListener("click", copyMarkdown);
+  $("copyBtn").addEventListener("click", copyMarkdown);
+  $("downloadBtn").addEventListener("click", () => {
+    const blob = new Blob([toMarkdown()], { type: "text/markdown;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "triage.md";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast("Downloaded triage.md");
+  });
+
+  $("resetBtn").addEventListener("click", () => {
+    if (!confirm("Move all 20 tickets back to Unsorted?")) return;
+    state = freshState();
+    commit();
+    toast("Board reset");
+  });
+
+  /* ---------- Toast ---------- */
+  let toastTimer;
+  function toast(msg) {
+    const t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

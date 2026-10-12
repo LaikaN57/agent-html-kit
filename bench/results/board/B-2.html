@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CHK Triage Board</title>
+<style>
+  :root {
+    --bg: #f4f5f8;
+    --panel: #ffffff;
+    --ink: #1c2230;
+    --muted: #6b7385;
+    --line: #e2e5ec;
+    --shadow: 0 1px 2px rgba(20,30,50,.06), 0 4px 14px rgba(20,30,50,.06);
+    --inbox: #8a93a6;
+    --now: #e5484d;
+    --next: #f2a33a;
+    --later: #3e7bfa;
+    --cut: #5b6170;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    padding: 28px clamp(14px, 3vw, 40px) 48px;
+  }
+  header {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between;
+    gap: 16px; margin-bottom: 18px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0; }
+  kbd {
+    font: 600 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+    background: #fff; border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 4px; padding: 2px 5px; color: var(--ink);
+  }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line);
+    background: #fff; color: var(--ink); padding: 7px 13px; font-weight: 600;
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  button:hover { background: #f0f2f6; }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  button.primary:hover { background: #2d3548; }
+  button:focus-visible, .card:focus-visible, textarea:focus-visible {
+    outline: 3px solid rgba(62,123,250,.45); outline-offset: 2px;
+  }
+
+  /* Summary chart */
+  .summary {
+    background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 16px 18px; margin-bottom: 18px;
+  }
+  .summary-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .summary-top strong { font-size: 15px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 13px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #chart { width: 100%; height: 30px; display: block; }
+
+  /* Board */
+  .board {
+    display: grid;
+    grid-template-columns: minmax(240px, 1.1fr) repeat(4, minmax(200px, 1fr));
+    gap: 14px; align-items: start;
+  }
+  @media (max-width: 1150px) { .board { grid-template-columns: repeat(2, minmax(0, 1fr)); } .lane[data-lane="inbox"] { grid-column: 1 / -1; } }
+  @media (max-width: 600px) { .board { grid-template-columns: 1fr; } }
+
+  .lane {
+    background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);
+    display: flex; flex-direction: column; min-height: 220px;
+    border-top: 4px solid var(--c);
+  }
+  .lane-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px 8px;
+  }
+  .lane-head h2 { font-size: 14px; margin: 0; letter-spacing: .02em; display: flex; align-items: center; gap: 8px; }
+  .lane-head .key { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .count {
+    min-width: 26px; text-align: center; font-weight: 700; font-size: 12px;
+    background: color-mix(in srgb, var(--c) 14%, white); color: var(--c);
+    border-radius: 999px; padding: 2px 8px; font-variant-numeric: tabular-nums;
+  }
+  .list {
+    flex: 1; padding: 6px 10px 12px; display: flex; flex-direction: column; gap: 8px;
+    min-height: 140px; border-radius: 0 0 var(--radius) var(--radius);
+    transition: background .15s;
+  }
+  .list.over { background: color-mix(in srgb, var(--c) 7%, white); }
+  .empty {
+    color: var(--muted); font-size: 13px; text-align: center;
+    border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px 10px;
+    pointer-events: none;
+  }
+
+  .card {
+    position: relative; background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    padding: 9px 11px 9px 13px; cursor: grab; user-select: none;
+    box-shadow: 0 1px 1px rgba(20,30,50,.04);
+    transition: box-shadow .15s, border-color .15s, opacity .15s;
+  }
+  .card::before {
+    content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px;
+    border-radius: 0 3px 3px 0; background: var(--c);
+  }
+  .card:hover { border-color: #cfd4de; box-shadow: 0 2px 8px rgba(20,30,50,.08); }
+  .card.dragging { opacity: .35; }
+  .card .tid {
+    font: 600 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+    color: var(--muted); letter-spacing: .02em;
+  }
+  .card .title { display: block; margin-top: 4px; font-weight: 550; }
+  .moves { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+  .moves button {
+    padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 6px;
+    color: var(--bc); border-color: color-mix(in srgb, var(--bc) 35%, white); background: #fff;
+  }
+  .moves button:hover { background: color-mix(in srgb, var(--bc) 10%, white); }
+  @media (hover: hover) {
+    .moves { display: none; }
+    .card:hover .moves, .card:focus-within .moves { display: flex; }
+  }
+  .placeholder {
+    height: 44px; border-radius: 10px; border: 2px dashed var(--c);
+    background: color-mix(in srgb, var(--c) 8%, white);
+  }
+
+  /* Export */
+  .export {
+    margin-top: 18px; background: var(--panel); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 16px 18px;
+  }
+  .export-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .export-head h2 { font-size: 15px; margin: 0; }
+  .export-head label { color: var(--muted); font-size: 13px; display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  textarea {
+    width: 100%; min-height: 240px; resize: vertical; border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; background: #fafbfc; color: var(--ink);
+    font: 13px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px);
+    background: var(--ink); color: #fff; padding: 9px 16px; border-radius: 8px; font-weight: 600;
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>CHK Triage Board</h1>
+    <p class="sub">Drag each ticket into a lane. Keyboard: focus a card, press <kbd>1</kbd> Now · <kbd>2</kbd> Next · <kbd>3</kbd> Later · <kbd>4</kbd> Cut · <kbd>0</kbd> Untriaged · <kbd>↑</kbd><kbd>↓</kbd> reorder.</p>
+  </div>
+  <div class="toolbar">
+    <button type="button" id="resetBtn" title="Move every ticket back to Untriaged">Reset board</button>
+    <button type="button" class="primary" id="copyTopBtn">Copy markdown</button>
+  </div>
+</header>
+
+<section class="summary" aria-label="Triage progress">
+  <div class="summary-top">
+    <strong id="progressText">0 of 20 triaged</strong>
+    <div class="legend" id="legend"></div>
+  </div>
+  <svg id="chart" viewBox="0 0 1000 30" preserveAspectRatio="none" role="img" aria-labelledby="chartTitle">
+    <title id="chartTitle">Ticket distribution across lanes</title>
+    <g id="chartBars"></g>
+  </svg>
+</section>
+
+<main class="board" id="board"></main>
+
+<section class="export" aria-label="Markdown export">
+  <div class="export-head">
+    <h2>Markdown export</h2>
+    <div class="toolbar">
+      <label><input type="checkbox" id="includeInbox" checked> Include untriaged</label>
+      <button type="button" id="downloadBtn">Download .md</button>
+      <button type="button" class="primary" id="copyBtn">Copy markdown</button>
+    </div>
+  </div>
+  <textarea id="md" readonly aria-label="Markdown output"></textarea>
+</section>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="sr-only" id="announce" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  const TICKETS = [
+    ["CHK-201", "Saved cards for returning customers"],
+    ["CHK-202", "Split payments across two cards"],
+    ["CHK-203", "Klarna pay-later option"],
+    ["CHK-204", "Fix double-click on Place order"],
+    ["CHK-205", "Address autocomplete for the EU"],
+    ["CHK-206", "Show delivery date before payment"],
+    ["CHK-207", "Gift message field"],
+    ["CHK-208", "Cart abandonment email"],
+    ["CHK-209", "PayPal express button"],
+    ["CHK-210", "Remove legacy coupon service"],
+    ["CHK-211", "3-D Secure retry flow"],
+    ["CHK-212", "Currency switcher"],
+    ["CHK-213", "Order summary redesign"],
+    ["CHK-214", "Rate limit the coupon endpoint"],
+    ["CHK-215", "Guest checkout A/B readout"],
+    ["CHK-216", "Accessibility audit fixes"],
+    ["CHK-217", "Apple Pay on Android Chrome"],
+    ["CHK-218", "UK VAT calculation"],
+    ["CHK-219", "Fraud rules dashboard"],
+    ["CHK-220", "Retire the v1 checkout API"]
+  ];
+  const TITLE = Object.fromEntries(TICKETS);
+
+  const LANES = [
+    { id: "inbox", name: "Untriaged", key: "0", color: "var(--inbox)", hex: "#8a93a6" },
+    { id: "now",   name: "Now",       key: "1", color: "var(--now)",   hex: "#e5484d" },
+    { id: "next",  name: "Next",      key: "2", color: "var(--next)",  hex: "#f2a33a" },
+    { id: "later", name: "Later",     key: "3", color: "var(--later)", hex: "#3e7bfa" },
+    { id: "cut",   name: "Cut",       key: "4", color: "var(--cut)",   hex: "#5b6170" }
+  ];
+  const LANE = Object.fromEntries(LANES.map(l => [l.id, l]));
+  const STORE_KEY = "chk-triage-board-v1";
+
+  function freshState() {
+    const s = {};
+    LANES.forEach(l => s[l.id] = []);
+    s.inbox = TICKETS.map(t => t[0]);
+    return s;
+  }
+
+  function loadState() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(STORE_KEY));
+      if (!raw) return freshState();
+      const s = {}; const seen = new Set();
+      LANES.forEach(l => {
+        s[l.id] = (Array.isArray(raw[l.id]) ? raw[l.id] : [])
+          .filter(id => TITLE[id] && !seen.has(id) && seen.add(id));
+      });
+      TICKETS.forEach(([id]) => { if (!seen.has(id)) s.inbox.push(id); });
+      return s;
+    } catch (e) { return freshState(); }
+  }
+
+  let state = loadState();
+  const save = () => { try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {} };
+
+  const board = document.getElementById("board");
+  const lists = {};
+  const counts = {};
+
+  // Build lanes once
+  LANES.forEach(l => {
+    const lane = document.createElement("section");
+    lane.className = "lane";
+    lane.dataset.lane = l.id;
+    lane.style.setProperty("--c", l.color);
+    lane.innerHTML =
+      '<div class="lane-head"><h2>' + l.name + ' <span class="key">key ' + l.key + '</span></h2>' +
+      '<span class="count">0</span></div><div class="list" aria-label="' + l.name + ' lane"></div>';
+    board.appendChild(lane);
+    lists[l.id] = lane.querySelector(".list");
+    counts[l.id] = lane.querySelector(".count");
+    wireDrop(lists[l.id], l.id);
+  });
+
+  function laneOf(id) {
+    return LANES.find(l => state[l.id].includes(id)).id;
+  }
+
+  function makeCard(id, laneId) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.draggable = true;
+    card.tabIndex = 0;
+    card.dataset.id = id;
+    card.setAttribute("aria-label", id + " " + TITLE[id] + ", in " + LANE[laneId].name);
+
+    const tid = document.createElement("span");
+    tid.className = "tid"; tid.textContent = id;
+    const title = document.createElement("span");
+    title.className = "title"; title.textContent = TITLE[id];
+    const moves = document.createElement("div");
+    moves.className = "moves";
+
+    LANES.forEach(l => {
+      if (l.id === laneId) return;
+      if (l.id === "inbox" && laneId === "inbox") return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = l.id === "inbox" ? "↩ Untriage" : l.name;
+      b.style.setProperty("--bc", l.hex);
+      b.tabIndex = -1;
+      b.addEventListener("click", e => { e.stopPropagation(); moveTo(id, l.id, true); });
+      moves.appendChild(b);
+    });
+
+    card.append(tid, title, moves);
+
+    card.addEventListener("dragstart", e => {
+      dragId = id;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", id);
+      requestAnimationFrame(() => card.classList.add("dragging"));
+    });
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
+      clearDropUI();
+      dragId = null;
+    });
+    card.addEventListener("keydown", e => onCardKey(e, id));
+    return card;
+  }
+
+  function render(focusId) {
+    LANES.forEach(l => {
+      const list = lists[l.id];
+      list.innerHTML = "";
+      state[l.id].forEach(id => list.appendChild(makeCard(id, l.id)));
+      if (!state[l.id].length) {
+        const e = document.createElement("div");
+        e.className = "empty";
+        e.textContent = l.id === "inbox" ? "All tickets triaged 🎉" : "Drop tickets here";
+        list.appendChild(e);
+      }
+      counts[l.id].textContent = state[l.id].length;
+    });
+    renderChart();
+    renderMarkdown();
+    if (focusId) {
+      const c = board.querySelector('.card[data-id="' + focusId + '"]');
+      if (c) c.focus();
+    }
+  }
+
+  // --- Moving ---------------------------------------------------------------
+  function moveTo(id, laneId, keepFocus, index) {
+    const from = laneOf(id);
+    state[from] = state[from].filter(x => x !== id);
+    const arr = state[laneId];
+    if (index == null || index > arr.length) arr.push(id); else arr.splice(index, 0, id);
+    save();
+    render(keepFocus ? id : null);
+    if (from !== laneId) announce(id + " moved to " + LANE[laneId].name);
+  }
+
+  function onCardKey(e, id) {
+    const target = LANES.find(l => l.key === e.key);
+    if (target) { e.preventDefault(); moveTo(id, target.id, true); return; }
+    if (e.key === "Backspace" || e.key === "Delete") { e.preventDefault(); moveTo(id, "inbox", true); return; }
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const lane = laneOf(id), arr = state[lane], i = arr.indexOf(id);
+      const j = e.key === "ArrowUp" ? i - 1 : i + 1;
+      if (e.altKey || e.shiftKey) {
+        if (j < 0 || j >= arr.length) return;
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+        save(); render(id);
+      } else {
+        const sib = board.querySelector('.card[data-id="' + arr[j] + '"]');
+        if (sib) sib.focus();
+        else if (j >= 0 && j < arr.length) {}
+      }
+      return;
+    }
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+      e.preventDefault();
+      const idx = LANES.findIndex(l => l.id === laneOf(id));
+      const n = LANES[idx + (e.key === "ArrowLeft" ? -1 : 1)];
+      if (n && (e.altKey || e.shiftKey)) moveTo(id, n.id, true);
+      else if (n && n !== undefined) {
+        const first = lists[n.id].querySelector(".card");
+        if (first) first.focus();
+      }
+    }
+  }
+
+  // --- Drag & drop ----------------------------------------------------------
+  let dragId = null;
+  const placeholder = document.createElement("div");
+  placeholder.className = "placeholder";
+
+  function clearDropUI() {
+    placeholder.remove();
+    Object.values(lists).forEach(l => l.classList.remove("over"));
+  }
+
+  function afterElement(list, y) {
+    const cards = [...list.querySelectorAll(".card:not(.dragging)")];
+    let best = null, bestOffset = -Infinity;
+    cards.forEach(c => {
+      const r = c.getBoundingClientRect();
+      const off = y - r.top - r.height / 2;
+      if (off < 0 && off > bestOffset) { bestOffset = off; best = c; }
+    });
+    return best;
+  }
+
+  function wireDrop(list, laneId) {
+    list.addEventListener("dragover", e => {
+      if (!dragId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      Object.values(lists).forEach(l => l.classList.toggle("over", l === list));
+      const empty = list.querySelector(".empty");
+      if (empty) empty.style.display = "none";
+      const after = afterElement(list, e.clientY);
+      if (after) { if (placeholder.nextSibling !== after) list.insertBefore(placeholder, after); }
+      else if (list.lastElementChild !== placeholder) list.appendChild(placeholder);
+    });
+    list.addEventListener("dragleave", e => {
+      if (!list.contains(e.relatedTarget)) {
+        list.classList.remove("over");
+        if (placeholder.parentNode === list) placeholder.remove();
+        const empty = list.querySelector(".empty");
+        if (empty) empty.style.display = "";
+      }
+    });
+    list.addEventListener("drop", e => {
+      e.preventDefault();
+      const id = dragId || e.dataTransfer.getData("text/plain");
+      if (!TITLE[id]) return;
+      let index = 0;
+      for (const el of list.children) {
+        if (el === placeholder) break;
+        if (el.classList.contains("card") && el.dataset.id !== id) index++;
+      }
+      clearDropUI();
+      moveTo(id, laneId, false, index);
+    });
+  }
+
+  // --- Chart ----------------------------------------------------------------
+  const NS = "http://www.w3.org/2000/svg";
+  function renderChart() {
+    const g = document.getElementById("chartBars");
+    g.innerHTML = "";
+    const total = TICKETS.length;
+    const order = ["now", "next", "later", "cut", "inbox"];
+    const bg = document.createElementNS(NS, "rect");
+    bg.setAttribute("x", 0); bg.setAttribute("y", 0);
+    bg.setAttribute("width", 1000); bg.setAttribute("height", 30);
+    bg.setAttribute("fill", "#eef0f4");
+    g.appendChild(bg);
+    let x = 0;
+    order.forEach(id => {
+      const n = state[id].length;
+      if (!n) return;
+      const w = (n / total) * 1000;
+      const r = document.createElementNS(NS, "rect");
+      r.setAttribute("x", x); r.setAttribute("y", 0);
+      r.setAttribute("width", Math.max(0, w - (x + w < 999 ? 2 : 0)));
+      r.setAttribute("height", 30);
+      r.setAttribute("fill", LANE[id].hex);
+      if (id === "inbox") r.setAttribute("fill-opacity", ".35");
+      const t = document.createElementNS(NS, "title");
+      t.textContent = LANE[id].name + ": " + n;
+      r.appendChild(t);
+      g.appendChild(r);
+      x += w;
+    });
+    // rounded mask look via clip
+    document.getElementById("chart").style.borderRadius = "8px";
+
+    const triaged = total - state.inbox.length;
+    document.getElementById("progressText").textContent = triaged + " of " + total + " triaged";
+    document.getElementById("legend").innerHTML = order.map(id =>
+      '<span><i style="background:' + LANE[id].hex + (id === "inbox" ? ';opacity:.45' : '') + '"></i>' +
+      LANE[id].name + ' <b>' + state[id].length + '</b></span>').join("");
+  }
+
+  // --- Markdown -------------------------------------------------------------
+  const includeInbox = document.getElementById("includeInbox");
+  function buildMarkdown() {
+    const lines = ["# Checkout triage result", ""];
+    const triaged = TICKETS.length - state.inbox.length;
+    lines.push("Triaged " + triaged + " of " + TICKETS.length + " tickets.", "");
+    const order = ["now", "next", "later", "cut"];
+    if (includeInbox.checked) order.push("inbox");
+    order.forEach(id => {
+      lines.push("## " + LANE[id].name + " (" + state[id].length + ")");
+      if (!state[id].length) lines.push("- _none_");
+      else state[id].forEach(t => lines.push("- " + t + " " + TITLE[t]));
+      lines.push("");
+    });
+    return lines.join("\n").trimEnd() + "\n";
+  }
+  function renderMarkdown() { document.getElementById("md").value = buildMarkdown(); }
+  includeInbox.addEventListener("change", renderMarkdown);
+
+  // --- Actions --------------------------------------------------------------
+  const toastEl = document.getElementById("toast");
+  let toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove("show"), 1800);
+  }
+  function announce(msg) { document.getElementById("announce").textContent = msg; }
+
+  async function copyMarkdown() {
+    const text = buildMarkdown();
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Markdown copied");
+    } catch (e) {
+      const ta = document.getElementById("md");
+      ta.focus(); ta.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (_) {}
+      toast(ok ? "Markdown copied" : "Select the text and press Ctrl+C");
+    }
+  }
+  document.getElementById("copyBtn").addEventListener("click", copyMarkdown);
+  document.getElementById("copyTopBtn").addEventListener("click", copyMarkdown);
+
+  document.getElementById("downloadBtn").addEventListener("click", () => {
+    const blob = new Blob([buildMarkdown()], { type: "text/markdown" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "chk-triage.md";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    if (!confirm("Move every ticket back to Untriaged?")) return;
+    state = freshState();
+    save(); render();
+    toast("Board reset");
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

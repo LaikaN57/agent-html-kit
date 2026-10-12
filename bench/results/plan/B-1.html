@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Implementation Plan: pricing.quote()</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --panel: #ffffff;
+    --ink: #1d2433;
+    --muted: #5d6779;
+    --line: #dfe3ec;
+    --accent: #3b6fd8;
+    --accent-soft: #eaf1ff;
+    --warn: #b7791f;
+    --warn-soft: #fff6e5;
+    --err: #c0392b;
+    --err-soft: #fdecea;
+    --ok: #2f8f5b;
+    --ok-soft: #e7f6ee;
+    --mono: "Cascadia Code", "Consolas", "SFMono-Regular", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+    font-size: 15px;
+  }
+  header {
+    background: linear-gradient(135deg, #22335c 0%, #3b6fd8 100%);
+    color: #fff;
+    padding: 44px 24px 36px;
+  }
+  header .wrap { max-width: 1080px; margin: 0 auto; }
+  header h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: -0.3px; }
+  header p { margin: 4px 0; opacity: 0.92; max-width: 820px; }
+  header code { background: rgba(255,255,255,0.16); color: #fff; }
+  .badges { margin-top: 14px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 999px; padding: 3px 12px; font-size: 13px;
+  }
+  nav.toc {
+    position: sticky; top: 0; z-index: 10;
+    background: rgba(255,255,255,0.96); backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav.toc .wrap {
+    max-width: 1080px; margin: 0 auto; padding: 10px 24px;
+    display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  nav.toc a {
+    text-decoration: none; color: var(--muted); font-size: 13.5px;
+    padding: 4px 10px; border-radius: 6px;
+  }
+  nav.toc a:hover { background: var(--accent-soft); color: var(--accent); }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px; }
+  section {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 26px 30px; margin-bottom: 22px;
+    box-shadow: 0 1px 2px rgba(20,30,60,0.04);
+  }
+  h2 { margin: 0 0 14px; font-size: 22px; display: flex; align-items: center; gap: 10px; }
+  h2 .num {
+    display: inline-flex; width: 30px; height: 30px; border-radius: 8px;
+    background: var(--accent); color: #fff; font-size: 15px;
+    align-items: center; justify-content: center;
+  }
+  h3 { margin: 22px 0 8px; font-size: 17px; }
+  code, .mono { font-family: var(--mono); font-size: 0.92em; }
+  code { background: #f0f2f7; padding: 1px 5px; border-radius: 4px; }
+  pre {
+    background: #1f2533; color: #e7ebf3; padding: 14px 16px; border-radius: 8px;
+    overflow-x: auto; font-family: var(--mono); font-size: 13.5px; line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 6px; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #f3f5fa; font-weight: 600; color: #2b3447; border-bottom: 2px solid var(--line); }
+  tbody tr:hover { background: #fafbfe; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+  .callout {
+    border-left: 4px solid var(--accent); background: var(--accent-soft);
+    padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 14px 0;
+  }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.err { border-color: var(--err); background: var(--err-soft); }
+  .callout.ok { border-color: var(--ok); background: var(--ok-soft); }
+  .callout strong:first-child { display: block; margin-bottom: 2px; }
+  .pill {
+    display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  }
+  .pill.err { background: var(--err-soft); color: var(--err); }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.info { background: var(--accent-soft); color: var(--accent); }
+  .copy {
+    border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer;
+    font-size: 12px; padding: 2px 8px; margin-left: 6px; color: var(--muted);
+  }
+  .copy:hover { border-color: var(--accent); color: var(--accent); }
+  .diagram-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: #fbfcff; padding: 10px; }
+  .diagram-wrap svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .legend span::before {
+    content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+    margin-right: 6px; vertical-align: -1px; border: 1.5px solid;
+  }
+  .legend .l-proc::before { background: #eef4ff; border-color: #3b6fd8; }
+  .legend .l-dec::before { background: #fff7e6; border-color: #d08a00; }
+  .legend .l-err::before { background: #fdecec; border-color: #c43c3c; }
+  .legend .l-term::before { background: #e8f6ee; border-color: #2f8f5b; }
+
+  /* Steps checklist */
+  .progress { height: 8px; background: #e8ebf2; border-radius: 99px; overflow: hidden; margin: 6px 0 16px; }
+  .progress > div { height: 100%; width: 0; background: linear-gradient(90deg, #3b6fd8, #2f8f5b); transition: width .25s; }
+  .progress-label { font-size: 13px; color: var(--muted); }
+  ol.steps { list-style: none; padding: 0; margin: 0; counter-reset: step; }
+  ol.steps > li {
+    counter-increment: step; position: relative;
+    border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px 12px 62px; margin-bottom: 10px;
+    transition: background .2s, border-color .2s;
+  }
+  ol.steps > li::before {
+    content: counter(step); position: absolute; left: 16px; top: 13px;
+    width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+    display: flex; align-items: center; justify-content: center; font-weight: 700;
+  }
+  ol.steps > li.done { background: var(--ok-soft); border-color: #b6dfc8; }
+  ol.steps > li.done::before { content: "✓"; background: var(--ok); color: #fff; }
+  ol.steps label { font-weight: 600; cursor: pointer; display: flex; gap: 8px; align-items: center; }
+  ol.steps input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--ok); }
+  ol.steps ul { margin: 6px 0 0; padding-left: 20px; }
+  ol.steps li li { margin: 3px 0; }
+
+  /* Examples */
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 14px; align-items: center; }
+  .toolbar button {
+    border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 13px;
+    font-size: 13px; cursor: pointer; color: var(--muted);
+  }
+  .toolbar button.active, .toolbar button:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .toolbar .spacer { flex: 1; }
+  details.ex {
+    border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; background: #fff;
+  }
+  details.ex[open] { box-shadow: 0 2px 10px rgba(30,50,100,0.07); }
+  details.ex summary {
+    cursor: pointer; padding: 12px 16px; display: flex; gap: 10px; align-items: center; list-style: none;
+  }
+  details.ex summary::-webkit-details-marker { display: none; }
+  details.ex summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+  details.ex[open] summary::before { transform: rotate(90deg); }
+  details.ex summary .id { font-family: var(--mono); font-weight: 700; color: var(--accent); min-width: 34px; }
+  details.ex summary .title { flex: 1; font-weight: 600; }
+  details.ex .body { padding: 0 18px 16px; border-top: 1px dashed var(--line); }
+  .result-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 12px; }
+  .result-grid div {
+    background: #f6f8fc; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; text-align: center;
+  }
+  .result-grid .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .result-grid .v { font-family: var(--mono); font-weight: 700; font-size: 17px; }
+  .result-grid .total { background: var(--ok-soft); border-color: #b6dfc8; }
+  .calc td:first-child { color: var(--muted); width: 34%; }
+  .calc td.num { width: 18%; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) {
+    .grid2 { grid-template-columns: 1fr; }
+    .result-grid { grid-template-columns: repeat(2, 1fr); }
+    section { padding: 20px 16px; }
+  }
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 10px 0 40px; }
+  .toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(30px);
+    background: #1f2533; color: #fff; padding: 8px 16px; border-radius: 8px; font-size: 13px;
+    opacity: 0; transition: all .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>Implementation Plan — <code>pricing.quote()</code></h1>
+    <p>A complete specification for a Python module <code>pricing.py</code> exposing one function that prices a shopping cart: subtotal, discounts (coupon + membership), shipping, tax and total. Everything an implementer needs is on this page; the original requirements are not needed.</p>
+    <div class="badges">
+      <span class="badge">Language: Python 3</span>
+      <span class="badge">Money: integer cents only</span>
+      <span class="badge">Rounding: half up, per computation</span>
+      <span class="badge">Regions: US · EU · UK</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#contract">1. Contract</a>
+    <a href="#terms">2. Terms</a>
+    <a href="#flow">3. Flow diagram</a>
+    <a href="#rules">4. Rules</a>
+    <a href="#decisions">5. Decisions</a>
+    <a href="#steps">6. Steps</a>
+    <a href="#examples">7. Worked examples</a>
+    <a href="#tests">8. Test plan</a>
+    <a href="#pitfalls">9. Pitfalls</a>
+  </div>
+</nav>
+
+<main>
+
+<!-- 1. CONTRACT -->
+<section id="contract">
+  <h2><span class="num">1</span>Function contract</h2>
+  <pre><code># pricing.py
+def quote(cart, region, coupon=None, member=False) -&gt; dict</code></pre>
+
+  <div class="grid2">
+    <div>
+      <h3>Inputs</h3>
+      <table>
+        <thead><tr><th>Parameter</th><th>Type</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>cart</code></td><td>list of dict</td><td>Line items. May be empty.</td></tr>
+          <tr><td><code>region</code></td><td>str</td><td>Must be exactly <code>"US"</code>, <code>"EU"</code> or <code>"UK"</code>.</td></tr>
+          <tr><td><code>coupon</code></td><td>str or <code>None</code></td><td>Optional coupon code. <code>None</code> = no coupon.</td></tr>
+          <tr><td><code>member</code></td><td>bool</td><td>Whether the customer is a member. Default <code>False</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Cart item shape</h3>
+      <table>
+        <thead><tr><th>Key</th><th>Type</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>"sku"</code></td><td>str</td><td>Identifier. Not used in calculation.</td></tr>
+          <tr><td><code>"price"</code></td><td>int</td><td>Unit price in cents.</td></tr>
+          <tr><td><code>"qty"</code></td><td>int</td><td>Quantity; must be ≥ 1.</td></tr>
+          <tr><td><code>"category"</code></td><td>str</td><td><code>"gift-card"</code> is special; all other values are ordinary goods.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h3>Output</h3>
+      <p>A <code>dict</code> with <strong>exactly these five keys</strong>, every value a Python <code>int</code> (cents). No other keys.</p>
+      <table>
+        <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>subtotal</code></td><td>Σ price × qty over all items (gift cards included)</td></tr>
+          <tr><td><code>discount</code></td><td>coupon discount + member discount</td></tr>
+          <tr><td><code>shipping</code></td><td>0, 599 or 899</td></tr>
+          <tr><td><code>tax</code></td><td>Tax on (eligible − discount + shipping)</td></tr>
+          <tr><td><code>total</code></td><td>subtotal − discount + shipping + tax</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Exceptions</h3>
+      <p>All errors are <code>ValueError</code> with an exact message string:</p>
+      <table>
+        <thead><tr><th>Message (exact)</th><th></th></tr></thead>
+        <tbody>
+          <tr><td><code>unsupported region</code></td><td><button class="copy" data-copy="unsupported region">copy</button></td></tr>
+          <tr><td><code>invalid qty</code></td><td><button class="copy" data-copy="invalid qty">copy</button></td></tr>
+          <tr><td><code>unknown coupon</code></td><td><button class="copy" data-copy="unknown coupon">copy</button></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 2. TERMS -->
+<section id="terms">
+  <h2><span class="num">2</span>Terms used in this plan</h2>
+  <table>
+    <thead><tr><th style="width:24%">Term</th><th>Definition</th></tr></thead>
+    <tbody>
+      <tr><td><strong>gift card</strong></td><td>An item whose <code>category</code> equals <code>"gift-card"</code> exactly. Counts toward subtotal; never discounted; never taxed.</td></tr>
+      <tr><td><strong>subtotal</strong></td><td>Σ <code>price × qty</code> over <em>all</em> items.</td></tr>
+      <tr><td><strong>eligible</strong></td><td>Σ <code>price × qty</code> over all items that are <em>not</em> gift cards. Coupons, member discount and tax operate on this amount.</td></tr>
+      <tr><td><strong>coupon_discount</strong></td><td>Discount produced by the coupon (0 if no coupon or coupon condition not met).</td></tr>
+      <tr><td><strong>member_discount</strong></td><td>5 % of <code>(eligible − coupon_discount)</code>, only if <code>member</code> is true; else 0.</td></tr>
+      <tr><td><strong>discount</strong></td><td><code>coupon_discount + member_discount</code>. This is the value returned under <code>"discount"</code>.</td></tr>
+      <tr><td><strong>half up</strong></td><td>Round to the nearest whole cent; an exact .5 goes <em>up</em> (100.5 → 101, 50.5 → 51). Python's built-in <code>round()</code> uses banker's rounding (100.5 → 100) and <strong>must not</strong> be used.</td></tr>
+      <tr><td><strong>pct(amount, p)</strong></td><td>Shorthand in this plan for "p percent of amount, rounded half up to a whole cent". For non-negative integer amounts: <code>(amount * p + 50) // 100</code> — pure integer arithmetic, no floats.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 3. FLOW -->
+<section id="flow">
+  <h2><span class="num">3</span>Calculation flow</h2>
+  <p>Execute top to bottom. Validation (orange diamonds) happens in this exact order and before any arithmetic; the first failing check raises.</p>
+  <div class="diagram-wrap">
+  <svg viewBox="0 0 800 1250" width="800" height="1250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, system-ui, sans-serif" font-size="13">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#55607a"/>
+      </marker>
+      <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#c43c3c"/>
+      </marker>
+      <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#2f8f5b"/>
+      </marker>
+      <filter id="sh" x="-5%" y="-5%" width="110%" height="120%">
+        <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#1d2433" flood-opacity="0.12"/>
+      </filter>
+    </defs>
+
+    <!-- Phase labels -->
+    <rect x="10" y="78" width="14" height="384" rx="4" fill="#fff1d6"/>
+    <text x="17" y="270" transform="rotate(-90 17 270)" text-anchor="middle" font-size="11" fill="#b7791f" font-weight="600">VALIDATION</text>
+    <rect x="10" y="484" width="14" height="316" rx="4" fill="#e3ecff"/>
+    <text x="17" y="642" transform="rotate(-90 17 642)" text-anchor="middle" font-size="11" fill="#3b6fd8" font-weight="600">DISCOUNTS</text>
+    <rect x="10" y="812" width="14" height="420" rx="4" fill="#dff2e7"/>
+    <text x="17" y="1022" transform="rotate(-90 17 1022)" text-anchor="middle" font-size="11" fill="#2f8f5b" font-weight="600">SHIPPING · TAX · TOTAL</text>
+
+    <!-- Start -->
+    <rect x="110" y="18" width="300" height="42" rx="21" fill="#e8f6ee" stroke="#2f8f5b" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="44" text-anchor="middle" font-weight="600">quote(cart, region, coupon, member)</text>
+    <line x1="260" y1="60" x2="260" y2="83" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- D1 region -->
+    <polygon points="260,85 410,120 260,155 110,120" fill="#fff7e6" stroke="#d08a00" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="117" text-anchor="middle" font-weight="600">region ∈ {"US","EU","UK"}?</text>
+    <text x="260" y="133" text-anchor="middle" font-size="11" fill="#7a5a10">exact, case-sensitive</text>
+    <line x1="410" y1="120" x2="528" y2="120" stroke="#c43c3c" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+    <text x="440" y="112" font-size="12" fill="#c43c3c" font-weight="600">No</text>
+    <rect x="530" y="98" width="250" height="44" rx="8" fill="#fdecec" stroke="#c43c3c" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="655" y="124" text-anchor="middle" font-family="Consolas, monospace" font-size="12">ValueError("unsupported region")</text>
+    <line x1="260" y1="155" x2="260" y2="183" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="268" y="174" font-size="12" fill="#2f8f5b" font-weight="600">Yes</text>
+
+    <!-- D2 qty -->
+    <polygon points="260,185 410,220 260,255 110,220" fill="#fff7e6" stroke="#d08a00" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="217" text-anchor="middle" font-weight="600">every item: qty ≥ 1?</text>
+    <text x="260" y="233" text-anchor="middle" font-size="11" fill="#7a5a10">empty cart passes</text>
+    <line x1="410" y1="220" x2="528" y2="220" stroke="#c43c3c" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+    <text x="440" y="212" font-size="12" fill="#c43c3c" font-weight="600">No</text>
+    <rect x="530" y="198" width="250" height="44" rx="8" fill="#fdecec" stroke="#c43c3c" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="655" y="224" text-anchor="middle" font-family="Consolas, monospace" font-size="12">ValueError("invalid qty")</text>
+    <line x1="260" y1="255" x2="260" y2="283" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="268" y="274" font-size="12" fill="#2f8f5b" font-weight="600">Yes</text>
+
+    <!-- D3 coupon -->
+    <polygon points="260,285 410,320 260,355 110,320" fill="#fff7e6" stroke="#d08a00" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="313" text-anchor="middle" font-weight="600">coupon is None, or</text>
+    <text x="260" y="329" text-anchor="middle" font-weight="600">strip().upper() ∈ {SAVE10, FLAT500}?</text>
+    <line x1="410" y1="320" x2="528" y2="320" stroke="#c43c3c" stroke-width="1.5" marker-end="url(#arrowRed)"/>
+    <text x="440" y="312" font-size="12" fill="#c43c3c" font-weight="600">No</text>
+    <rect x="530" y="298" width="250" height="44" rx="8" fill="#fdecec" stroke="#c43c3c" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="655" y="324" text-anchor="middle" font-family="Consolas, monospace" font-size="12">ValueError("unknown coupon")</text>
+    <line x1="260" y1="355" x2="260" y2="383" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="268" y="374" font-size="12" fill="#2f8f5b" font-weight="600">Yes</text>
+
+    <!-- D4 empty -->
+    <polygon points="260,385 410,420 260,455 110,420" fill="#fff7e6" stroke="#d08a00" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="425" text-anchor="middle" font-weight="600">cart is empty?</text>
+    <line x1="410" y1="420" x2="528" y2="420" stroke="#2f8f5b" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+    <text x="440" y="412" font-size="12" fill="#2f8f5b" font-weight="600">Yes</text>
+    <rect x="530" y="398" width="250" height="44" rx="22" fill="#e8f6ee" stroke="#2f8f5b" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="655" y="418" text-anchor="middle" font-weight="600">return all five keys = 0</text>
+    <text x="655" y="434" text-anchor="middle" font-size="11" fill="#2f6b49">(even if member / coupon given)</text>
+    <line x1="260" y1="455" x2="260" y2="488" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="268" y="476" font-size="12" fill="#55607a" font-weight="600">No</text>
+
+    <!-- P1 subtotal -->
+    <rect x="80" y="490" width="360" height="54" rx="8" fill="#eef4ff" stroke="#3b6fd8" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="512" text-anchor="middle" font-weight="600">subtotal = Σ price × qty (all items)</text>
+    <text x="260" y="532" text-anchor="middle">eligible = Σ price × qty (category ≠ "gift-card")</text>
+    <line x1="260" y1="544" x2="260" y2="568" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- P2 coupon -->
+    <rect x="80" y="570" width="360" height="70" rx="8" fill="#eef4ff" stroke="#3b6fd8" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="592" text-anchor="middle" font-weight="600">coupon_discount</text>
+    <text x="260" y="611" text-anchor="middle">SAVE10 → pct(eligible, 10)</text>
+    <text x="260" y="629" text-anchor="middle">FLAT500 → 500 if eligible ≥ 3000 else 0 · none → 0</text>
+    <line x1="260" y1="640" x2="260" y2="664" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- P3 member -->
+    <rect x="80" y="666" width="360" height="54" rx="8" fill="#eef4ff" stroke="#3b6fd8" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="688" text-anchor="middle" font-weight="600">member_discount</text>
+    <text x="260" y="708" text-anchor="middle">member → pct(eligible − coupon_discount, 5) · else 0</text>
+    <line x1="260" y1="720" x2="260" y2="744" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- P4 discount -->
+    <rect x="80" y="746" width="360" height="42" rx="8" fill="#eef4ff" stroke="#3b6fd8" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="772" text-anchor="middle" font-weight="600">discount = coupon_discount + member_discount</text>
+    <line x1="260" y1="788" x2="260" y2="818" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- D5 shipping -->
+    <polygon points="260,820 420,860 260,900 100,860" fill="#fff7e6" stroke="#d08a00" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="856" text-anchor="middle" font-weight="600">member, or</text>
+    <text x="260" y="872" text-anchor="middle" font-weight="600">subtotal − discount ≥ 5000?</text>
+    <line x1="420" y1="860" x2="528" y2="860" stroke="#2f8f5b" stroke-width="1.5" marker-end="url(#arrowGreen)"/>
+    <text x="446" y="852" font-size="12" fill="#2f8f5b" font-weight="600">Yes</text>
+    <rect x="530" y="840" width="250" height="40" rx="8" fill="#eef4ff" stroke="#3b6fd8" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="655" y="865" text-anchor="middle" font-weight="600">shipping = 0</text>
+    <line x1="260" y1="900" x2="260" y2="928" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="268" y="919" font-size="12" fill="#c43c3c" font-weight="600">No</text>
+
+    <rect x="80" y="930" width="360" height="42" rx="8" fill="#eef4ff" stroke="#3b6fd8" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="956" text-anchor="middle" font-weight="600">shipping = 599 (US) · 899 (EU, UK)</text>
+
+    <!-- merge -->
+    <polyline points="655,880 655,1000 262,1000" fill="none" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <line x1="260" y1="972" x2="260" y2="1026" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <circle cx="260" cy="1000" r="3.5" fill="#55607a"/>
+
+    <!-- P tax -->
+    <rect x="80" y="1028" width="360" height="54" rx="8" fill="#eef4ff" stroke="#3b6fd8" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="1050" text-anchor="middle" font-weight="600">tax = pct(eligible − discount + shipping, rate)</text>
+    <text x="260" y="1070" text-anchor="middle">rate: US 7 · EU 20 · UK 20</text>
+    <line x1="260" y1="1082" x2="260" y2="1106" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- P total -->
+    <rect x="80" y="1108" width="360" height="42" rx="8" fill="#eef4ff" stroke="#3b6fd8" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="1134" text-anchor="middle" font-weight="600">total = subtotal − discount + shipping + tax</text>
+    <line x1="260" y1="1150" x2="260" y2="1174" stroke="#55607a" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+    <!-- End -->
+    <rect x="80" y="1176" width="360" height="44" rx="22" fill="#e8f6ee" stroke="#2f8f5b" stroke-width="1.6" filter="url(#sh)"/>
+    <text x="260" y="1203" text-anchor="middle" font-weight="600">return {subtotal, discount, shipping, tax, total}</text>
+
+    <!-- Side note on rounding -->
+    <rect x="530" y="570" width="250" height="150" rx="8" fill="#ffffff" stroke="#dfe3ec" stroke-dasharray="4 3"/>
+    <text x="545" y="594" font-weight="600" fill="#3b6fd8">pct(a, p) — half up</text>
+    <text x="545" y="616" font-family="Consolas, monospace" font-size="12">(a * p + 50) // 100</text>
+    <text x="545" y="640" font-size="12" fill="#5d6779">Used exactly 3 times:</text>
+    <text x="545" y="658" font-size="12" fill="#5d6779">• SAVE10 discount</text>
+    <text x="545" y="676" font-size="12" fill="#5d6779">• member discount</text>
+    <text x="545" y="694" font-size="12" fill="#5d6779">• tax</text>
+    <text x="545" y="712" font-size="12" fill="#c43c3c">Never round() · never float</text>
+  </svg>
+  </div>
+  <div class="legend">
+    <span class="l-term">Start / return</span>
+    <span class="l-dec">Decision</span>
+    <span class="l-proc">Computation</span>
+    <span class="l-err">Raise ValueError</span>
+  </div>
+</section>
+
+<!-- 4. RULES -->
+<section id="rules">
+  <h2><span class="num">4</span>Rules</h2>
+
+  <h3>4.1 Validation (runs first, in this order; first failure wins)</h3>
+  <table>
+    <thead><tr><th>#</th><th>Check</th><th>Fails when</th><th>Raise</th></tr></thead>
+    <tbody>
+      <tr><td>V1</td><td>Region</td><td><code>region</code> is not exactly one of <code>"US"</code>, <code>"EU"</code>, <code>"UK"</code> (case-sensitive; <code>"us"</code>, <code>" US"</code>, <code>"FR"</code>, <code>None</code> all fail)</td><td><code>ValueError("unsupported region")</code></td></tr>
+      <tr><td>V2</td><td>Quantities</td><td>Any item has <code>qty &lt; 1</code> (0 or negative). Checked over the whole cart; an empty cart passes.</td><td><code>ValueError("invalid qty")</code></td></tr>
+      <tr><td>V3</td><td>Coupon code</td><td><code>coupon</code> is not <code>None</code> and <code>coupon.strip().upper()</code> is neither <code>"SAVE10"</code> nor <code>"FLAT500"</code> (includes empty string <code>""</code> and whitespace-only). See decision D1.</td><td><code>ValueError("unknown coupon")</code></td></tr>
+      <tr><td>—</td><td>Empty cart</td><td>Not an error. After V1–V3 pass, if <code>cart</code> is empty return <code>{"subtotal":0,"discount":0,"shipping":0,"tax":0,"total":0}</code> — regardless of <code>member</code> or <code>coupon</code>.</td><td><span class="pill ok">returns zeros</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.2 Subtotal &amp; eligible amount</h3>
+  <table>
+    <thead><tr><th>Item category</th><th>Counts toward subtotal</th><th>Counts toward eligible</th><th>Discountable</th><th>Taxed</th></tr></thead>
+    <tbody>
+      <tr><td><code>"gift-card"</code></td><td><span class="pill ok">Yes</span></td><td><span class="pill err">No</span></td><td><span class="pill err">Never</span></td><td><span class="pill err">Never</span></td></tr>
+      <tr><td>anything else</td><td><span class="pill ok">Yes</span></td><td><span class="pill ok">Yes</span></td><td><span class="pill ok">Yes</span></td><td><span class="pill ok">Yes</span></td></tr>
+    </tbody>
+  </table>
+  <p>Line amount = <code>price × qty</code> (int × int, exact).</p>
+
+  <h3>4.3 Coupons</h3>
+  <p>Normalise: <code>code = coupon.strip().upper()</code>. Case-insensitive; leading/trailing whitespace ignored (inner whitespace is not stripped, so <code>"SAVE 10"</code> is unknown).</p>
+  <table>
+    <thead><tr><th>Normalised code</th><th>Condition</th><th>coupon_discount</th><th>Rounding</th></tr></thead>
+    <tbody>
+      <tr><td><code>None</code> (no coupon)</td><td>—</td><td class="num">0</td><td>—</td></tr>
+      <tr><td><code>SAVE10</code></td><td>always</td><td><code>pct(eligible, 10)</code></td><td>half up, immediately</td></tr>
+      <tr><td><code>FLAT500</code></td><td><code>eligible ≥ 3000</code></td><td class="num">500</td><td>none needed</td></tr>
+      <tr><td><code>FLAT500</code></td><td><code>eligible &lt; 3000</code></td><td class="num">0</td><td>— (not an error)</td></tr>
+      <tr><td>anything else</td><td>—</td><td colspan="2">raise <code>ValueError("unknown coupon")</code> (during validation, V3)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn"><strong>Threshold uses eligible, not subtotal.</strong> Gift cards do not help reach the FLAT500 3000-cent minimum.</div>
+
+  <h3>4.4 Member discount</h3>
+  <table>
+    <thead><tr><th>member</th><th>member_discount</th></tr></thead>
+    <tbody>
+      <tr><td>truthy</td><td><code>pct(eligible − coupon_discount, 5)</code> — computed <em>after</em> the coupon, on the post-coupon eligible amount</td></tr>
+      <tr><td>falsy</td><td class="num" style="text-align:left">0</td></tr>
+    </tbody>
+  </table>
+  <p><code>discount = coupon_discount + member_discount</code> (both already whole cents).</p>
+
+  <h3>4.5 Shipping (evaluate top to bottom, first match wins)</h3>
+  <table>
+    <thead><tr><th>#</th><th>Condition</th><th class="num">shipping</th></tr></thead>
+    <tbody>
+      <tr><td>S1</td><td><code>member</code> is truthy</td><td class="num">0</td></tr>
+      <tr><td>S2</td><td><code>subtotal − discount ≥ 5000</code> (note: <strong>subtotal</strong>, gift cards included; boundary 5000 is free)</td><td class="num">0</td></tr>
+      <tr><td>S3</td><td>region <code>"US"</code></td><td class="num">599</td></tr>
+      <tr><td>S4</td><td>region <code>"EU"</code> or <code>"UK"</code></td><td class="num">899</td></tr>
+    </tbody>
+  </table>
+  <p>Shipping applies even if the cart contains only gift cards (non-member, under threshold).</p>
+
+  <h3>4.6 Tax</h3>
+  <table>
+    <thead><tr><th>Region</th><th class="num">Rate</th><th>Formula</th></tr></thead>
+    <tbody>
+      <tr><td>US</td><td class="num">7 %</td><td rowspan="3"><code>tax = pct(eligible − discount + shipping, rate)</code><br><br>Gift cards are excluded (base uses eligible). Shipping <em>is</em> taxed.</td></tr>
+      <tr><td>EU</td><td class="num">20 %</td></tr>
+      <tr><td>UK</td><td class="num">20 %</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.7 Rounding</h3>
+  <table>
+    <thead><tr><th>Value</th><th>Rounded?</th><th>When</th></tr></thead>
+    <tbody>
+      <tr><td>SAVE10 discount</td><td><span class="pill info">half up</span></td><td>immediately when computed; the rounded value feeds the member step</td></tr>
+      <tr><td>member discount</td><td><span class="pill info">half up</span></td><td>immediately when computed</td></tr>
+      <tr><td>tax</td><td><span class="pill info">half up</span></td><td>immediately when computed</td></tr>
+      <tr><td>subtotal, eligible, FLAT500, shipping, discount sum, total</td><td>no</td><td>integer arithmetic, already exact</td></tr>
+    </tbody>
+  </table>
+  <div class="callout err"><strong>Do not use <code>round()</code> or floats.</strong> <code>round(100.5) == 100</code> and <code>round(50.5) == 50</code> in Python (banker's rounding); the spec requires 101 and 51. Floats can also mis-represent values like <code>x.xx5</code>. Use <code>(a * p + 50) // 100</code>, valid because every base is a non-negative integer (see D4). <code>decimal.Decimal</code> with <code>ROUND_HALF_UP</code> is an acceptable alternative but the integer formula is preferred.</div>
+
+  <h3>4.8 Total</h3>
+  <p><code>total = subtotal − discount + shipping + tax</code> (no further rounding).</p>
+</section>
+
+<!-- 5. DECISIONS -->
+<section id="decisions">
+  <h2><span class="num">5</span>Decisions on gaps in the requirements</h2>
+  <p>The requirements are silent on these points. Implement as stated below; items marked <span class="pill warn">confirm</span> should be confirmed with the product manager but must not block implementation.</p>
+  <table>
+    <thead><tr><th>#</th><th>Question</th><th>Decision</th><th></th></tr></thead>
+    <tbody>
+      <tr><td>D1</td><td>When is an unknown coupon detected — during validation or only when applying the coupon? (Matters for an empty cart with a bad code.)</td><td>During validation, as step V3 after region and qty, <strong>before</strong> the empty-cart shortcut. So <code>quote([], "US", coupon="BAD")</code> raises <code>unknown coupon</code>. Rationale: bad input should never silently succeed.</td><td><span class="pill warn">confirm</span></td></tr>
+      <tr><td>D2</td><td>Is <code>region</code> case-insensitive like coupons?</td><td>No. Only coupons are normalised. <code>"us"</code> → <code>unsupported region</code>.</td><td><span class="pill info">final</span></td></tr>
+      <tr><td>D3</td><td>Is the empty string a "no coupon"?</td><td>No. Only <code>None</code> means no coupon. <code>""</code> and <code>"   "</code> → <code>unknown coupon</code>.</td><td><span class="pill info">final</span></td></tr>
+      <tr><td>D4</td><td>Negative or zero prices?</td><td>Not validated (no rule given; do not invent new errors). The plan assumes <code>price ≥ 0</code>, which keeps every rounding base non-negative.</td><td><span class="pill warn">confirm</span></td></tr>
+      <tr><td>D5</td><td>Is the <code>"gift-card"</code> match case-sensitive?</td><td>Yes, exact string equality.</td><td><span class="pill info">final</span></td></tr>
+      <tr><td>D6</td><td>Type checking of inputs (e.g. <code>qty</code> as float, missing keys)?</td><td>Not required; no extra validation or error messages beyond the three defined. Missing keys may raise <code>KeyError</code> naturally.</td><td><span class="pill info">final</span></td></tr>
+      <tr><td>D7</td><td>Side effects</td><td>Must not mutate <code>cart</code> or its items. Pure function, no I/O, no global state.</td><td><span class="pill info">final</span></td></tr>
+      <tr><td>D8</td><td>Can discount exceed eligible?</td><td>No, by construction: FLAT500 only applies when eligible ≥ 3000 &gt; 500; SAVE10 + 5 % are fractions. No clamping logic needed.</td><td><span class="pill info">final</span></td></tr>
+      <tr><td>D9</td><td><code>member</code> type</td><td>Use plain truthiness (<code>if member:</code>).</td><td><span class="pill info">final</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 6. STEPS -->
+<section id="steps">
+  <h2><span class="num">6</span>Ordered implementation steps</h2>
+  <div class="progress-label" id="progLabel">0 of 9 steps done</div>
+  <div class="progress"><div id="progBar"></div></div>
+  <ol class="steps" id="stepList">
+    <li><label><input type="checkbox"> Create <code>pricing.py</code> with module constants</label>
+      <ul>
+        <li><code>SHIPPING_RATES = {"US": 599, "EU": 899, "UK": 899}</code></li>
+        <li><code>TAX_PERCENT = {"US": 7, "EU": 20, "UK": 20}</code> (the key set doubles as the supported-region set)</li>
+        <li><code>FREE_SHIPPING_THRESHOLD = 5000</code>, <code>FLAT500_MINIMUM = 3000</code>, <code>FLAT500_AMOUNT = 500</code>, <code>SAVE10_PERCENT = 10</code>, <code>MEMBER_PERCENT = 5</code>, <code>GIFT_CARD = "gift-card"</code></li>
+      </ul></li>
+    <li><label><input type="checkbox"> Write a private half-up percentage helper</label>
+      <ul>
+        <li><code>_pct(amount: int, percent: int) -&gt; int</code> returning <code>(amount * percent + 50) // 100</code>.</li>
+        <li>Unit-test it alone: <code>_pct(1005,10)=101</code>, <code>_pct(1010,5)=51</code>, <code>_pct(1004,10)=100</code>, <code>_pct(0,20)=0</code>, <code>_pct(899,20)=180</code>.</li>
+      </ul></li>
+    <li><label><input type="checkbox"> Validate region (V1)</label>
+      <ul><li><code>if region not in TAX_PERCENT: raise ValueError("unsupported region")</code> — first statement of <code>quote</code>.</li></ul></li>
+    <li><label><input type="checkbox"> Validate quantities (V2)</label>
+      <ul><li>Loop all items; if any <code>item["qty"] &lt; 1</code> raise <code>ValueError("invalid qty")</code>.</li></ul></li>
+    <li><label><input type="checkbox"> Normalise &amp; validate coupon (V3)</label>
+      <ul>
+        <li>If <code>coupon is None</code>: <code>code = None</code>. Else <code>code = coupon.strip().upper()</code>; if not in <code>{"SAVE10", "FLAT500"}</code> raise <code>ValueError("unknown coupon")</code>.</li>
+      </ul></li>
+    <li><label><input type="checkbox"> Empty-cart shortcut</label>
+      <ul><li>If <code>not cart</code>: return the five keys all <code>0</code>.</li></ul></li>
+    <li><label><input type="checkbox"> Compute subtotal, eligible, coupon and member discounts</label>
+      <ul>
+        <li><code>subtotal</code> over all items; <code>eligible</code> over items with <code>category != "gift-card"</code>.</li>
+        <li><code>coupon_discount</code> per table 4.3 (rounded at once for SAVE10).</li>
+        <li><code>member_discount = _pct(eligible - coupon_discount, 5) if member else 0</code>.</li>
+        <li><code>discount = coupon_discount + member_discount</code>.</li>
+      </ul></li>
+    <li><label><input type="checkbox"> Compute shipping, tax, total and return</label>
+      <ul>
+        <li>Shipping per table 4.5 (member → 0; <code>subtotal - discount &gt;= 5000</code> → 0; else region rate).</li>
+        <li><code>tax = _pct(eligible - discount + shipping, TAX_PERCENT[region])</code>.</li>
+        <li><code>total = subtotal - discount + shipping + tax</code>.</li>
+        <li>Return a new dict with exactly <code>subtotal, discount, shipping, tax, total</code>, all <code>int</code>.</li>
+      </ul></li>
+    <li><label><input type="checkbox"> Write tests (section 8) and run them</label>
+      <ul>
+        <li>Every worked example in section 7 as a parametrised test; assert the whole returned dict with <code>==</code> (catches extra keys) and <code>type(v) is int</code> for each value.</li>
+        <li>Error tests assert both exception type and exact message (<code>pytest.raises(ValueError, match=r"^unknown coupon$")</code>).</li>
+      </ul></li>
+  </ol>
+</section>
+
+<!-- 7. EXAMPLES -->
+<section id="examples">
+  <h2><span class="num">7</span>Worked examples</h2>
+  <p>All values in cents. Every example is a required test case. <code>pct(a,p) = (a·p + 50) // 100</code>.</p>
+  <div class="toolbar" id="exFilters">
+    <button class="active" data-f="all">All</button>
+    <button data-f="basic">Basic</button>
+    <button data-f="coupon">Coupons</button>
+    <button data-f="member">Member</button>
+    <button data-f="giftcard">Gift cards</button>
+    <button data-f="boundary">Boundaries</button>
+    <button data-f="rounding">Rounding</button>
+    <button data-f="error">Errors</button>
+    <span class="spacer"></span>
+    <button id="expandAll">Expand all</button>
+    <button id="collapseAll">Collapse all</button>
+  </div>
+
+  <div id="exList">
+
+  <details class="ex" data-tags="basic rounding" open>
+    <summary><span class="id">E1</span><span class="title">US, no coupon, non-member, multi-qty</span><span class="pill info">total 2781</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"B1","price":1000,"qty":2,"category":"books"}], "US")</code></p>
+      <table class="calc"><tbody>
+        <tr><td>subtotal = eligible</td><td>1000 × 2</td><td class="num">2000</td></tr>
+        <tr><td>coupon / member</td><td>none</td><td class="num">0</td></tr>
+        <tr><td>shipping</td><td>not member; 2000 − 0 = 2000 &lt; 5000 → US</td><td class="num">599</td></tr>
+        <tr><td>tax</td><td>pct(2000 − 0 + 599 = 2599, 7) = (18193+50)//100 → 181.93 ↑</td><td class="num">182</td></tr>
+        <tr><td>total</td><td>2000 − 0 + 599 + 182</td><td class="num">2781</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">2000</div></div><div><div class="k">discount</div><div class="v">0</div></div><div><div class="k">shipping</div><div class="v">599</div></div><div><div class="k">tax</div><div class="v">182</div></div><div class="total"><div class="k">total</div><div class="v">2781</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="coupon rounding">
+    <summary><span class="id">E2</span><span class="title">UK, SAVE10 with messy case/whitespace, half-up on .5</span><span class="pill info">total 2164</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"A","price":1005,"qty":1,"category":"toys"}], "UK", coupon="  save10 ")</code></p>
+      <table class="calc"><tbody>
+        <tr><td>coupon normalised</td><td><code>"  save10 "</code> → <code>"SAVE10"</code></td><td class="num">—</td></tr>
+        <tr><td>subtotal = eligible</td><td></td><td class="num">1005</td></tr>
+        <tr><td>coupon_discount</td><td>pct(1005, 10) → 100.5 → half up (Python <code>round</code> would give 100 ✗)</td><td class="num">101</td></tr>
+        <tr><td>discount</td><td>101 + 0</td><td class="num">101</td></tr>
+        <tr><td>shipping</td><td>1005 − 101 = 904 &lt; 5000 → UK</td><td class="num">899</td></tr>
+        <tr><td>tax</td><td>pct(1005 − 101 + 899 = 1803, 20) → 360.6</td><td class="num">361</td></tr>
+        <tr><td>total</td><td>1005 − 101 + 899 + 361</td><td class="num">2164</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">1005</div></div><div><div class="k">discount</div><div class="v">101</div></div><div><div class="k">shipping</div><div class="v">899</div></div><div><div class="k">tax</div><div class="v">361</div></div><div class="total"><div class="k">total</div><div class="v">2164</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="coupon member giftcard rounding">
+    <summary><span class="id">E3</span><span class="title">EU, SAVE10 + member + gift card</span><span class="pill info">total 7616</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"A","price":2550,"qty":1,"category":"apparel"}, {"sku":"G","price":5000,"qty":1,"category":"gift-card"}], "EU", coupon="SAVE10", member=True)</code></p>
+      <table class="calc"><tbody>
+        <tr><td>subtotal</td><td>2550 + 5000</td><td class="num">7550</td></tr>
+        <tr><td>eligible</td><td>gift card excluded</td><td class="num">2550</td></tr>
+        <tr><td>coupon_discount</td><td>pct(2550, 10) = 255.0</td><td class="num">255</td></tr>
+        <tr><td>member_discount</td><td>pct(2550 − 255 = 2295, 5) → 114.75</td><td class="num">115</td></tr>
+        <tr><td>discount</td><td>255 + 115</td><td class="num">370</td></tr>
+        <tr><td>shipping</td><td>member</td><td class="num">0</td></tr>
+        <tr><td>tax</td><td>pct(2550 − 370 + 0 = 2180, 20)</td><td class="num">436</td></tr>
+        <tr><td>total</td><td>7550 − 370 + 0 + 436</td><td class="num">7616</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">7550</div></div><div><div class="k">discount</div><div class="v">370</div></div><div><div class="k">shipping</div><div class="v">0</div></div><div><div class="k">tax</div><div class="v">436</div></div><div class="total"><div class="k">total</div><div class="v">7616</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="member rounding">
+    <summary><span class="id">E4</span><span class="title">US member only, member discount lands on .5</span><span class="pill info">total 1026</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"A","price":1010,"qty":1,"category":"home"}], "US", member=True)</code></p>
+      <table class="calc"><tbody>
+        <tr><td>subtotal = eligible</td><td></td><td class="num">1010</td></tr>
+        <tr><td>member_discount</td><td>pct(1010, 5) → 50.5 → half up (<code>round</code> gives 50 ✗)</td><td class="num">51</td></tr>
+        <tr><td>shipping</td><td>member (even though far below 5000)</td><td class="num">0</td></tr>
+        <tr><td>tax</td><td>pct(1010 − 51 + 0 = 959, 7) → 67.13</td><td class="num">67</td></tr>
+        <tr><td>total</td><td>1010 − 51 + 0 + 67</td><td class="num">1026</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">1010</div></div><div><div class="k">discount</div><div class="v">51</div></div><div><div class="k">shipping</div><div class="v">0</div></div><div><div class="k">tax</div><div class="v">67</div></div><div class="total"><div class="k">total</div><div class="v">1026</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="coupon giftcard boundary">
+    <summary><span class="id">E5</span><span class="title">US FLAT500, eligible 2999 — gift card doesn't help reach 3000</span><span class="pill info">total 4850</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"A","price":2999,"qty":1,"category":"games"}, {"sku":"G","price":1000,"qty":1,"category":"gift-card"}], "US", coupon="FLAT500")</code></p>
+      <table class="calc"><tbody>
+        <tr><td>subtotal</td><td>2999 + 1000</td><td class="num">3999</td></tr>
+        <tr><td>eligible</td><td></td><td class="num">2999</td></tr>
+        <tr><td>coupon_discount</td><td>2999 &lt; 3000 → no discount, no error</td><td class="num">0</td></tr>
+        <tr><td>shipping</td><td>3999 &lt; 5000 → US</td><td class="num">599</td></tr>
+        <tr><td>tax</td><td>pct(2999 + 599 = 3598, 7) → 251.86</td><td class="num">252</td></tr>
+        <tr><td>total</td><td>3999 − 0 + 599 + 252</td><td class="num">4850</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">3999</div></div><div><div class="k">discount</div><div class="v">0</div></div><div><div class="k">shipping</div><div class="v">599</div></div><div><div class="k">tax</div><div class="v">252</div></div><div class="total"><div class="k">total</div><div class="v">4850</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="coupon boundary">
+    <summary><span class="id">E6</span><span class="title">US FLAT500, eligible exactly 3000 — applies</span><span class="pill info">total 3316</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"A","price":3000,"qty":1,"category":"games"}], "US", coupon="flat500")</code></p>
+      <table class="calc"><tbody>
+        <tr><td>subtotal = eligible</td><td></td><td class="num">3000</td></tr>
+        <tr><td>coupon_discount</td><td>3000 ≥ 3000</td><td class="num">500</td></tr>
+        <tr><td>shipping</td><td>3000 − 500 = 2500 &lt; 5000 → US</td><td class="num">599</td></tr>
+        <tr><td>tax</td><td>pct(2500 + 599 = 3099, 7) → 216.93</td><td class="num">217</td></tr>
+        <tr><td>total</td><td>3000 − 500 + 599 + 217</td><td class="num">3316</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">3000</div></div><div><div class="k">discount</div><div class="v">500</div></div><div><div class="k">shipping</div><div class="v">599</div></div><div><div class="k">tax</div><div class="v">217</div></div><div class="total"><div class="k">total</div><div class="v">3316</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="coupon boundary">
+    <summary><span class="id">E7</span><span class="title">US FLAT500 brings subtotal − discount to exactly 5000 → free shipping</span><span class="pill info">total 5350</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"A","price":5500,"qty":1,"category":"home"}], "US", coupon="FLAT500")</code></p>
+      <table class="calc"><tbody>
+        <tr><td>subtotal = eligible</td><td></td><td class="num">5500</td></tr>
+        <tr><td>coupon_discount</td><td>5500 ≥ 3000</td><td class="num">500</td></tr>
+        <tr><td>shipping</td><td>5500 − 500 = 5000 ≥ 5000 → free</td><td class="num">0</td></tr>
+        <tr><td>tax</td><td>pct(5000 + 0, 7)</td><td class="num">350</td></tr>
+        <tr><td>total</td><td>5500 − 500 + 0 + 350</td><td class="num">5350</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">5500</div></div><div><div class="k">discount</div><div class="v">500</div></div><div><div class="k">shipping</div><div class="v">0</div></div><div><div class="k">tax</div><div class="v">350</div></div><div class="total"><div class="k">total</div><div class="v">5350</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="boundary basic">
+    <summary><span class="id">E8</span><span class="title">US, subtotal 4999 — one cent short of free shipping</span><span class="pill info">total 5990</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"A","price":4999,"qty":1,"category":"home"}], "US")</code></p>
+      <table class="calc"><tbody>
+        <tr><td>subtotal = eligible</td><td></td><td class="num">4999</td></tr>
+        <tr><td>shipping</td><td>4999 &lt; 5000 → US</td><td class="num">599</td></tr>
+        <tr><td>tax</td><td>pct(4999 + 599 = 5598, 7) → 391.86</td><td class="num">392</td></tr>
+        <tr><td>total</td><td>4999 + 599 + 392</td><td class="num">5990</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">4999</div></div><div><div class="k">discount</div><div class="v">0</div></div><div><div class="k">shipping</div><div class="v">599</div></div><div><div class="k">tax</div><div class="v">392</div></div><div class="total"><div class="k">total</div><div class="v">5990</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="giftcard boundary">
+    <summary><span class="id">E9</span><span class="title">US, gift card pushes subtotal to 5000 → free shipping, but isn't taxed</span><span class="pill info">total 5140</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"T","price":2000,"qty":1,"category":"toys"}, {"sku":"G","price":1500,"qty":2,"category":"gift-card"}], "US")</code></p>
+      <table class="calc"><tbody>
+        <tr><td>subtotal</td><td>2000 + 1500 × 2</td><td class="num">5000</td></tr>
+        <tr><td>eligible</td><td></td><td class="num">2000</td></tr>
+        <tr><td>shipping</td><td>5000 − 0 ≥ 5000 (threshold uses subtotal)</td><td class="num">0</td></tr>
+        <tr><td>tax</td><td>pct(2000 − 0 + 0, 7) — gift cards excluded</td><td class="num">140</td></tr>
+        <tr><td>total</td><td>5000 − 0 + 0 + 140</td><td class="num">5140</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">5000</div></div><div><div class="k">discount</div><div class="v">0</div></div><div><div class="k">shipping</div><div class="v">0</div></div><div><div class="k">tax</div><div class="v">140</div></div><div class="total"><div class="k">total</div><div class="v">5140</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="giftcard coupon rounding">
+    <summary><span class="id">E10</span><span class="title">UK, gift-card-only cart with SAVE10 — coupon gives 0, shipping is taxed</span><span class="pill info">total 3079</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"G","price":2000,"qty":1,"category":"gift-card"}], "UK", coupon="SAVE10")</code></p>
+      <table class="calc"><tbody>
+        <tr><td>subtotal</td><td></td><td class="num">2000</td></tr>
+        <tr><td>eligible</td><td>only gift cards</td><td class="num">0</td></tr>
+        <tr><td>coupon_discount</td><td>pct(0, 10) — valid code, nothing to discount</td><td class="num">0</td></tr>
+        <tr><td>shipping</td><td>2000 &lt; 5000 → UK</td><td class="num">899</td></tr>
+        <tr><td>tax</td><td>pct(0 − 0 + 899, 20) → 179.8</td><td class="num">180</td></tr>
+        <tr><td>total</td><td>2000 − 0 + 899 + 180</td><td class="num">3079</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">2000</div></div><div><div class="k">discount</div><div class="v">0</div></div><div><div class="k">shipping</div><div class="v">899</div></div><div><div class="k">tax</div><div class="v">180</div></div><div class="total"><div class="k">total</div><div class="v">3079</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="coupon member">
+    <summary><span class="id">E11</span><span class="title">EU, FLAT500 + member — member 5 % on post-coupon amount</span><span class="pill info">total 3990</span></summary>
+    <div class="body">
+      <p><code>quote([{"sku":"A","price":2000,"qty":2,"category":"home"}], "EU", coupon="FLAT500", member=True)</code></p>
+      <table class="calc"><tbody>
+        <tr><td>subtotal = eligible</td><td>2000 × 2</td><td class="num">4000</td></tr>
+        <tr><td>coupon_discount</td><td>4000 ≥ 3000</td><td class="num">500</td></tr>
+        <tr><td>member_discount</td><td>pct(4000 − 500 = 3500, 5)</td><td class="num">175</td></tr>
+        <tr><td>discount</td><td>500 + 175</td><td class="num">675</td></tr>
+        <tr><td>shipping</td><td>member</td><td class="num">0</td></tr>
+        <tr><td>tax</td><td>pct(4000 − 675 + 0 = 3325, 20)</td><td class="num">665</td></tr>
+        <tr><td>total</td><td>4000 − 675 + 0 + 665</td><td class="num">3990</td></tr>
+      </tbody></table>
+      <div class="result-grid"><div><div class="k">subtotal</div><div class="v">4000</div></div><div><div class="k">discount</div><div class="v">675</div></div><div><div class="k">shipping</div><div class="v">0</div></div><div><div class="k">tax</div><div class="v">665</div></div><div class="total"><div class="k">total</div><div class="v">3990</div></div></div>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="basic boundary">
+    <summary><span class="id">E12</span><span class="title">Empty cart → all zeros (with member and valid coupon too)</span><span class="pill ok">all 0</span></summary>
+    <div class="body">
+      <p><code>quote([], "EU")</code> and <code>quote([], "US", coupon="SAVE10", member=True)</code> both return:</p>
+      <pre><code>{"subtotal": 0, "discount": 0, "shipping": 0, "tax": 0, "total": 0}</code></pre>
+      <p>Note: shipping is 0, not 599/899 — the empty-cart shortcut returns before shipping logic.</p>
+    </div>
+  </details>
+
+  <details class="ex" data-tags="error">
+    <summary><span class="id">X1</span><span class="title">Error cases and precedence</span><span class="pill err">ValueError</span></summary>
+    <div class="body">
+      <table>
+        <thead><tr><th>Call</th><th>Raises</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td><code>quote(cart_ok, "FR")</code></td><td><code>unsupported region</code></td><td>V1</td></tr>
+          <tr><td><code>quote(cart_ok, "us")</code></td><td><code>unsupported region</code></td><td>region is case-sensitive (D2)</td></tr>
+          <tr><td><code>quote([], "XX")</code></td><td><code>unsupported region</code></td><td>validation precedes empty-cart shortcut</td></tr>
+          <tr><td><code>quote([item with qty 0], "FR")</code></td><td><code>unsupported region</code></td><td>V1 before V2</td></tr>
+          <tr><td><code>quote([item with qty 0], "US")</code></td><td><code>invalid qty</code></td><td>V2</td></tr>
+          <tr><td><code>quote([ok item, item with qty -3], "EU")</code></td><td><code>invalid qty</code></td><td>any item fails V2</td></tr>
+          <tr><td><code>quote([item with qty 0], "US", coupon="BAD")</code></td><td><code>invalid qty</code></td><td>V2 before V3</td></tr>
+          <tr><td><code>quote(cart_ok, "US", coupon="SAVE20")</code></td><td><code>unknown coupon</code></td><td>V3</td></tr>
+          <tr><td><code>quote(cart_ok, "US", coupon="")</code></td><td><code>unknown coupon</code></td><td>empty string is not None (D3)</td></tr>
+          <tr><td><code>quote(cart_ok, "US", coupon="SAVE 10")</code></td><td><code>unknown coupon</code></td><td>inner space not removed</td></tr>
+          <tr><td><code>quote([], "US", coupon="BAD")</code></td><td><code>unknown coupon</code></td><td>V3 precedes empty-cart shortcut (D1)</td></tr>
+        </tbody>
+      </table>
+      <p><code>cart_ok = [{"sku":"A","price":1000,"qty":1,"category":"books"}]</code></p>
+    </div>
+  </details>
+
+  </div>
+</section>
+
+<!-- 8. TESTS -->
+<section id="tests">
+  <h2><span class="num">8</span>Test plan</h2>
+  <table>
+    <thead><tr><th>Area</th><th>Cases</th><th>Covered by</th></tr></thead>
+    <tbody>
+      <tr><td>Rounding helper</td><td>exact .5 rounds up; below .5 down; zero</td><td>Step 2 unit tests, E2, E4</td></tr>
+      <tr><td>Validation order</td><td>region &gt; qty &gt; coupon &gt; empty cart</td><td>X1</td></tr>
+      <tr><td>Exact messages</td><td>assert message string equality, not substring</td><td>X1</td></tr>
+      <tr><td>Coupon normalisation</td><td>lower case, surrounding whitespace</td><td>E2, E6</td></tr>
+      <tr><td>FLAT500 threshold</td><td>2999 → 0, 3000 → 500, gift cards ignored</td><td>E5, E6</td></tr>
+      <tr><td>Free-shipping threshold</td><td>4999 → paid, 5000 → free, gift cards count, discount subtracted first</td><td>E7, E8, E9</td></tr>
+      <tr><td>Member</td><td>discount after coupon; free shipping regardless of amount</td><td>E3, E4, E11</td></tr>
+      <tr><td>Gift cards</td><td>in subtotal; not discounted; not taxed; gift-card-only cart</td><td>E3, E9, E10</td></tr>
+      <tr><td>Regions</td><td>US 599/7 %, EU 899/20 %, UK 899/20 %</td><td>E1, E2, E3, E10, E11</td></tr>
+      <tr><td>Output shape</td><td>exactly 5 keys; each <code>type(v) is int</code>; input cart unchanged afterwards</td><td>all examples</td></tr>
+      <tr><td>Empty cart</td><td>zeros, including with member/coupon</td><td>E12</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 9. PITFALLS -->
+<section id="pitfalls">
+  <h2><span class="num">9</span>Pitfalls checklist</h2>
+  <div class="callout err"><strong>Using <code>round()</code> or <code>/</code>.</strong> <code>/</code> produces floats and <code>round()</code> is banker's rounding. Only <code>(a * p + 50) // 100</code>.</div>
+  <div class="callout warn"><strong>Rounding once at the end.</strong> Each percentage is rounded the moment it is computed; the member discount is based on the already-rounded SAVE10 value, and tax on the already-rounded discount.</div>
+  <div class="callout warn"><strong>Mixing up subtotal and eligible.</strong> FLAT500 threshold, SAVE10, member discount and tax base use <em>eligible</em>; the free-shipping threshold and <code>total</code> use <em>subtotal</em>.</div>
+  <div class="callout warn"><strong>Forgetting to tax shipping.</strong> Tax base is <code>eligible − discount + shipping</code>.</div>
+  <div class="callout warn"><strong>Checking the empty cart before validation.</strong> <code>quote([], "XX")</code> must still raise.</div>
+  <div class="callout warn"><strong>Treating <code>""</code> as no coupon</strong>, or normalising <code>region</code>.</div>
+  <div class="callout ok"><strong>Shipping strict vs non-strict.</strong> Free when <code>subtotal − discount &gt;= 5000</code> (5000 itself is free); FLAT500 when <code>eligible &gt;= 3000</code> (3000 itself qualifies).</div>
+</section>
+
+</main>
+
+<footer>Implementation plan for <code>pricing.quote()</code> · all amounts in integer cents</footer>
+<div class="toast" id="toast">Copied</div>
+
+<script>
+(function () {
+  // Step checklist progress
+  var list = document.getElementById('stepList');
+  var boxes = list.querySelectorAll('input[type=checkbox]');
+  function updateProgress() {
+    var done = 0;
+    boxes.forEach(function (b) {
+      b.closest('li').classList.toggle('done', b.checked);
+      if (b.checked) done++;
+    });
+    document.getElementById('progBar').style.width = (done / boxes.length * 100) + '%';
+    document.getElementById('progLabel').textContent = done + ' of ' + boxes.length + ' steps done';
+  }
+  boxes.forEach(function (b) { b.addEventListener('change', updateProgress); });
+  updateProgress();
+
+  // Example filters
+  var filterBtns = document.querySelectorAll('#exFilters button[data-f]');
+  var examples = document.querySelectorAll('#exList details.ex');
+  filterBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      filterBtns.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      var f = btn.getAttribute('data-f');
+      examples.forEach(function (ex) {
+        var tags = ex.getAttribute('data-tags').split(' ');
+        ex.style.display = (f === 'all' || tags.indexOf(f) !== -1) ? '' : 'none';
+      });
+    });
+  });
+  document.getElementById('expandAll').addEventListener('click', function () {
+    examples.forEach(function (ex) { if (ex.style.display !== 'none') ex.open = true; });
+  });
+  document.getElementById('collapseAll').addEventListener('click', function () {
+    examples.forEach(function (ex) { ex.open = false; });
+  });
+
+  // Copy buttons
+  var toast = document.getElementById('toast');
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(function () { toast.classList.remove('show'); }, 1300);
+  }
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var text = btn.getAttribute('data-copy');
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function () { showToast('Copied: ' + text); },
+          function () { showToast('Copy failed'); });
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); showToast('Copied: ' + text); } catch (e) { showToast('Copy failed'); }
+        document.body.removeChild(ta);
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

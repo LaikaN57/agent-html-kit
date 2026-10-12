@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CHK Triage Board</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --panel: #ffffff;
+    --ink: #1c2330;
+    --muted: #677285;
+    --line: #e2e5ea;
+    --focus: #3b6cf6;
+    --inbox: #8a94a6;
+    --now: #12a37f;
+    --next: #3b6cf6;
+    --later: #d9901a;
+    --cut: #c2464b;
+    --radius: 10px;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.4;
+  }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 24px 20px 48px; }
+
+  header.top {
+    display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;
+    margin-bottom: 18px;
+  }
+  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  button.btn {
+    font: inherit; font-weight: 600; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    padding: 8px 14px; border-radius: 8px; box-shadow: var(--shadow);
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  button.btn:hover { background: #f8f9fb; border-color: #cfd4dc; }
+  button.btn:active { transform: translateY(1px); }
+  button.btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  button.btn.primary:hover { background: #2c3546; }
+  button:focus-visible, .card:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--focus); outline-offset: 2px;
+  }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  /* Distribution chart */
+  .dist { padding: 14px 16px 12px; margin-bottom: 16px; }
+  .dist-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; gap: 12px; flex-wrap: wrap; }
+  .dist-head strong { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .progress-text { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .progress-text b { color: var(--ink); }
+  #distSvg { display: block; width: 100%; height: 34px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; color: var(--muted); font-size: 13px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend b { color: var(--ink); }
+
+  .hint {
+    color: var(--muted); font-size: 13px; margin: 0 0 12px;
+    display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  }
+  kbd {
+    font: 600 11px/1 ui-monospace, SFMono-Regular, Consolas, monospace;
+    border: 1px solid #cfd4dc; border-bottom-width: 2px; border-radius: 4px;
+    padding: 2px 5px; background: #fff; color: var(--ink);
+  }
+
+  /* Lanes */
+  .lane { display: flex; flex-direction: column; border-top: 3px solid var(--c); transition: box-shadow .15s, background .15s; }
+  .lane.over { box-shadow: 0 0 0 2px var(--c), var(--shadow); background: color-mix(in srgb, var(--c) 4%, #fff); }
+  .lane-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 8px; }
+  .lane-head h2 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+  .lane-head h2 .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+  .lane-head .key { color: var(--muted); font-size: 12px; font-weight: 500; }
+  .count {
+    font-variant-numeric: tabular-nums; font-weight: 700; font-size: 12px;
+    background: color-mix(in srgb, var(--c) 14%, #fff); color: color-mix(in srgb, var(--c) 80%, #000);
+    padding: 2px 9px; border-radius: 999px;
+  }
+  .list { padding: 4px 10px 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 120px; }
+
+  .inbox { --c: var(--inbox); margin-bottom: 16px; }
+  .inbox .list {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); min-height: 64px;
+  }
+  .columns { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+  .lane[data-lane="now"] { --c: var(--now); }
+  .lane[data-lane="next"] { --c: var(--next); }
+  .lane[data-lane="later"] { --c: var(--later); }
+  .lane[data-lane="cut"] { --c: var(--cut); }
+  .columns .lane { min-height: 320px; }
+
+  /* Cards */
+  .card {
+    position: relative; background: #fff; border: 1px solid var(--line); border-left: 3px solid var(--c);
+    border-radius: 8px; padding: 9px 10px 9px 11px; cursor: grab; user-select: none;
+    box-shadow: 0 1px 1px rgba(16,24,40,.04);
+    transition: box-shadow .15s, border-color .15s, opacity .15s;
+  }
+  .card:hover { box-shadow: 0 3px 10px rgba(16,24,40,.10); border-color: #cfd4dc; border-left-color: var(--c); }
+  .card:active { cursor: grabbing; }
+  .card.dragging { opacity: .35; }
+  .lane[data-lane="cut"] .card .ttl { text-decoration: line-through; text-decoration-color: rgba(194,70,75,.45); color: #4a5262; }
+  .tid {
+    display: inline-block; font: 600 11px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace;
+    color: var(--muted); letter-spacing: .02em;
+  }
+  .ttl { display: block; font-weight: 550; margin-top: 1px; }
+  .mv {
+    display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px;
+    max-height: 0; overflow: hidden; opacity: 0; transition: max-height .15s, opacity .15s, margin .15s;
+    margin-top: 0;
+  }
+  .card:hover .mv, .card:focus .mv, .card:focus-within .mv { max-height: 40px; opacity: 1; margin-top: 7px; }
+  @media (hover: none) { .mv { max-height: 40px; opacity: 1; margin-top: 7px; } }
+  .mv button {
+    font: 600 11px/1 system-ui, sans-serif; cursor: pointer;
+    border: 1px solid var(--line); background: #f8f9fb; color: var(--ink);
+    padding: 4px 7px; border-radius: 5px;
+  }
+  .mv button:hover { border-color: var(--b); color: var(--b); background: #fff; }
+  .mv button[data-to="inbox"] { --b: var(--inbox); }
+  .mv button[data-to="now"] { --b: var(--now); }
+  .mv button[data-to="next"] { --b: var(--next); }
+  .mv button[data-to="later"] { --b: var(--later); }
+  .mv button[data-to="cut"] { --b: var(--cut); }
+
+  .placeholder {
+    border: 2px dashed color-mix(in srgb, var(--c) 55%, #fff); border-radius: 8px;
+    min-height: 52px; background: color-mix(in srgb, var(--c) 6%, #fff);
+  }
+  .empty {
+    color: #9aa3b2; font-size: 13px; text-align: center; padding: 18px 8px;
+    border: 1px dashed var(--line); border-radius: 8px; grid-column: 1 / -1;
+  }
+  .list:has(.placeholder) .empty { display: none; }
+
+  /* Export */
+  .export { margin-top: 22px; padding: 18px; }
+  .export-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .export-head h2 { margin: 0; font-size: 17px; }
+  .warn {
+    display: none; margin: 0 0 14px; padding: 9px 12px; border-radius: 8px;
+    background: #fff7e8; border: 1px solid #f3dbad; color: #7a5410; font-size: 13px;
+  }
+  .warn.show { display: block; }
+  .export-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  thead th {
+    background: #f6f7f9; text-align: left; font-weight: 650; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .05em; font-size: 11px; padding: 9px 12px; border-bottom: 1px solid var(--line);
+  }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:nth-child(even) td { background: #fbfbfc; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  th.num { text-align: right; }
+  .bucket { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; }
+  .bucket i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .ids { font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; color: #3a4252; }
+  .ids .none { font-family: system-ui, sans-serif; color: #9aa3b2; }
+  textarea {
+    width: 100%; min-height: 340px; resize: vertical; border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--ink);
+    background: #fbfbfc;
+  }
+  .label { font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin: 0 0 6px; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 20px); opacity: 0;
+    background: var(--ink); color: #fff; padding: 9px 16px; border-radius: 8px; font-weight: 600;
+    box-shadow: 0 8px 24px rgba(0,0,0,.2); transition: opacity .2s, transform .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  @media (max-width: 1000px) {
+    .columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .export-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 560px) {
+    .columns { grid-template-columns: 1fr; }
+    .columns .lane { min-height: 160px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .actions, .hint, .mv, .export textarea, .export-head button { display: none !important; }
+    .panel { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Triage Board — CHK-201 to CHK-220</h1>
+      <p class="sub">Drag each ticket into Now, Next, Later or Cut, then export the result as markdown.</p>
+    </div>
+    <div class="actions">
+      <button class="btn" type="button" id="resetBtn">Reset board</button>
+      <button class="btn" type="button" id="jumpBtn">View export</button>
+      <button class="btn primary" type="button" id="copyTopBtn">Copy markdown</button>
+    </div>
+  </header>
+
+  <section class="panel dist" aria-label="Distribution of tickets">
+    <div class="dist-head">
+      <strong>Distribution</strong>
+      <span class="progress-text" id="progressText"></span>
+    </div>
+    <svg id="distSvg" viewBox="0 0 1000 34" preserveAspectRatio="none" role="img" aria-labelledby="distTitle">
+      <title id="distTitle">Tickets per bucket</title>
+      <defs>
+        <clipPath id="barClip"><rect x="0" y="0" width="1000" height="34" rx="7" ry="7"></rect></clipPath>
+      </defs>
+      <g id="distBars" clip-path="url(#barClip)"></g>
+    </svg>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <p class="hint">
+    Drag cards between columns, or hover a card and use its buttons. Keyboard: focus a card and press
+    <kbd>1</kbd> Now <kbd>2</kbd> Next <kbd>3</kbd> Later <kbd>4</kbd> Cut <kbd>0</kbd> Untriaged ·
+    <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> reorder · <kbd>↑</kbd>/<kbd>↓</kbd> move focus.
+    Progress is saved in this browser.
+  </p>
+
+  <section class="panel lane inbox" data-lane="inbox" aria-label="Untriaged tickets">
+    <div class="lane-head">
+      <h2><span class="dot"></span>Untriaged <span class="key">0</span></h2>
+      <span class="count" data-count="inbox">0</span>
+    </div>
+    <div class="list" data-lane="inbox" data-axis="grid" role="list"></div>
+  </section>
+
+  <div class="columns">
+    <section class="panel lane" data-lane="now" aria-label="Now">
+      <div class="lane-head"><h2><span class="dot"></span>Now <span class="key">1</span></h2><span class="count" data-count="now">0</span></div>
+      <div class="list" data-lane="now" data-axis="y" role="list"></div>
+    </section>
+    <section class="panel lane" data-lane="next" aria-label="Next">
+      <div class="lane-head"><h2><span class="dot"></span>Next <span class="key">2</span></h2><span class="count" data-count="next">0</span></div>
+      <div class="list" data-lane="next" data-axis="y" role="list"></div>
+    </section>
+    <section class="panel lane" data-lane="later" aria-label="Later">
+      <div class="lane-head"><h2><span class="dot"></span>Later <span class="key">3</span></h2><span class="count" data-count="later">0</span></div>
+      <div class="list" data-lane="later" data-axis="y" role="list"></div>
+    </section>
+    <section class="panel lane" data-lane="cut" aria-label="Cut">
+      <div class="lane-head"><h2><span class="dot"></span>Cut <span class="key">4</span></h2><span class="count" data-count="cut">0</span></div>
+      <div class="list" data-lane="cut" data-axis="y" role="list"></div>
+    </section>
+  </div>
+
+  <section class="panel export" id="export" aria-label="Export">
+    <div class="export-head">
+      <h2>Export</h2>
+      <div class="actions">
+        <button class="btn" type="button" id="downloadBtn">Download .md</button>
+        <button class="btn primary" type="button" id="copyBtn">Copy markdown</button>
+      </div>
+    </div>
+    <p class="warn" id="warn"></p>
+    <div class="export-grid">
+      <div>
+        <p class="label">Summary</p>
+        <table>
+          <thead><tr><th>Bucket</th><th class="num">Count</th><th class="num">Share</th><th>Tickets</th></tr></thead>
+          <tbody id="summaryBody"></tbody>
+        </table>
+      </div>
+      <div>
+        <p class="label"><label for="md">Markdown</label></p>
+        <textarea id="md" readonly spellcheck="false"></textarea>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+<div class="sr" id="live" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var TICKETS = [
+    ["CHK-201", "Saved cards for returning customers"],
+    ["CHK-202", "Split payments across two cards"],
+    ["CHK-203", "Klarna pay-later option"],
+    ["CHK-204", "Fix double-click on Place order"],
+    ["CHK-205", "Address autocomplete for the EU"],
+    ["CHK-206", "Show delivery date before payment"],
+    ["CHK-207", "Gift message field"],
+    ["CHK-208", "Cart abandonment email"],
+    ["CHK-209", "PayPal express button"],
+    ["CHK-210", "Remove legacy coupon service"],
+    ["CHK-211", "3-D Secure retry flow"],
+    ["CHK-212", "Currency switcher"],
+    ["CHK-213", "Order summary redesign"],
+    ["CHK-214", "Rate limit the coupon endpoint"],
+    ["CHK-215", "Guest checkout A/B readout"],
+    ["CHK-216", "Accessibility audit fixes"],
+    ["CHK-217", "Apple Pay on Android Chrome"],
+    ["CHK-218", "UK VAT calculation"],
+    ["CHK-219", "Fraud rules dashboard"],
+    ["CHK-220", "Retire the v1 checkout API"]
+  ];
+  var TITLE = {};
+  TICKETS.forEach(function (t) { TITLE[t[0]] = t[1]; });
+
+  var LANES = ["inbox", "now", "next", "later", "cut"];
+  var OUTPUT_LANES = ["now", "next", "later", "cut"];
+  var LABEL = { inbox: "Untriaged", now: "Now", next: "Next", later: "Later", cut: "Cut" };
+  var SHORT = { inbox: "Untriaged", now: "Now", next: "Next", later: "Later", cut: "Cut" };
+  var COLOR = { inbox: "#8a94a6", now: "#12a37f", next: "#3b6cf6", later: "#d9901a", cut: "#c2464b" };
+  var KEYMAP = { "0": "inbox", "1": "now", "2": "next", "3": "later", "4": "cut" };
+  var STORE = "chk-triage-board-v1";
+
+  var state = load();
+
+  function fresh() {
+    return { inbox: TICKETS.map(function (t) { return t[0]; }), now: [], next: [], later: [], cut: [] };
+  }
+  function valid(s) {
+    if (!s || typeof s !== "object") return false;
+    var seen = [];
+    for (var i = 0; i < LANES.length; i++) {
+      if (!Array.isArray(s[LANES[i]])) return false;
+      seen = seen.concat(s[LANES[i]]);
+    }
+    if (seen.length !== TICKETS.length) return false;
+    return TICKETS.every(function (t) { return seen.indexOf(t[0]) !== -1; });
+  }
+  function load() {
+    try {
+      var s = JSON.parse(localStorage.getItem(STORE));
+      if (valid(s)) return s;
+    } catch (e) {}
+    return fresh();
+  }
+  function save() {
+    try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function laneOf(id) {
+    for (var i = 0; i < LANES.length; i++) if (state[LANES[i]].indexOf(id) !== -1) return LANES[i];
+    return null;
+  }
+  function listEl(lane) { return document.querySelector('.list[data-lane="' + lane + '"]'); }
+
+  function move(id, to, index) {
+    LANES.forEach(function (k) {
+      var i = state[k].indexOf(id);
+      if (i !== -1) state[k].splice(i, 1);
+    });
+    var arr = state[to];
+    if (index == null || index > arr.length) arr.push(id);
+    else arr.splice(Math.max(0, index), 0, id);
+  }
+
+  function announce(msg) {
+    var live = document.getElementById("live");
+    live.textContent = "";
+    setTimeout(function () { live.textContent = msg; }, 30);
+  }
+
+  function cardEl(id, lane) {
+    var el = document.createElement("div");
+    el.className = "card";
+    el.draggable = true;
+    el.tabIndex = 0;
+    el.dataset.id = id;
+    el.setAttribute("role", "listitem");
+    el.setAttribute("aria-label", id + " " + TITLE[id] + ", in " + LABEL[lane]);
+    var buttons = LANES.filter(function (k) { return k !== lane; }).map(function (k) {
+      return '<button type="button" tabindex="-1" data-to="' + k + '" title="Move to ' + LABEL[k] +
+        ' (key ' + Object.keys(KEYMAP).filter(function (n) { return KEYMAP[n] === k; })[0] + ')">' + SHORT[k] + "</button>";
+    }).join("");
+    el.innerHTML = '<span class="tid">' + esc(id) + '</span><span class="ttl">' + esc(TITLE[id]) +
+      '</span><div class="mv">' + buttons + "</div>";
+    return el;
+  }
+
+  function render(focusId) {
+    LANES.forEach(function (k) {
+      var list = listEl(k);
+      list.textContent = "";
+      state[k].forEach(function (id) { list.appendChild(cardEl(id, k)); });
+      if (!state[k].length) {
+        var e = document.createElement("div");
+        e.className = "empty";
+        e.textContent = k === "inbox" ? "All tickets triaged" : "Drop tickets here";
+        list.appendChild(e);
+      }
+      document.querySelector('[data-count="' + k + '"]').textContent = state[k].length;
+    });
+    renderChart();
+    renderExport();
+    save();
+    if (focusId) {
+      var c = document.querySelector('.card[data-id="' + focusId + '"]');
+      if (c) c.focus({ preventScroll: false });
+    }
+  }
+
+  /* ---------- Chart ---------- */
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function renderChart() {
+    var total = TICKETS.length;
+    var g = document.getElementById("distBars");
+    g.textContent = "";
+    var x = 0;
+    var order = ["now", "next", "later", "cut", "inbox"];
+    order.forEach(function (k) {
+      var n = state[k].length;
+      if (!n) return;
+      var w = (n / total) * 1000;
+      var r = document.createElementNS(SVGNS, "rect");
+      r.setAttribute("x", x.toFixed(2));
+      r.setAttribute("y", "0");
+      r.setAttribute("width", w.toFixed(2));
+      r.setAttribute("height", "34");
+      r.setAttribute("fill", COLOR[k]);
+      if (k === "inbox") r.setAttribute("fill-opacity", "0.35");
+      var t = document.createElementNS(SVGNS, "title");
+      t.textContent = LABEL[k] + ": " + n;
+      r.appendChild(t);
+      g.appendChild(r);
+      if (x > 0) {
+        var sep = document.createElementNS(SVGNS, "rect");
+        sep.setAttribute("x", (x - 1).toFixed(2));
+        sep.setAttribute("y", "0");
+        sep.setAttribute("width", "2");
+        sep.setAttribute("height", "34");
+        sep.setAttribute("fill", "#ffffff");
+        g.appendChild(sep);
+      }
+      x += w;
+    });
+
+    var triaged = total - state.inbox.length;
+    document.getElementById("progressText").innerHTML =
+      "<b>" + triaged + "</b> of " + total + " triaged";
+
+    document.getElementById("legend").innerHTML = order.map(function (k) {
+      var style = k === "inbox" ? "background:" + COLOR[k] + ";opacity:.5" : "background:" + COLOR[k];
+      return '<span><i style="' + style + '"></i>' + LABEL[k] + " <b>" + state[k].length + "</b></span>";
+    }).join("");
+    document.getElementById("distSvg").setAttribute("aria-label",
+      order.map(function (k) { return LABEL[k] + " " + state[k].length; }).join(", "));
+  }
+
+  /* ---------- Export ---------- */
+  function markdown() {
+    var lines = ["# Triage result", ""];
+    OUTPUT_LANES.forEach(function (k) {
+      lines.push("## " + LABEL[k] + " (" + state[k].length + ")");
+      if (state[k].length) {
+        state[k].forEach(function (id) { lines.push("- " + id + " " + TITLE[id]); });
+      } else {
+        lines.push("- _None_");
+      }
+      lines.push("");
+    });
+    if (state.inbox.length) {
+      lines.push("## Untriaged (" + state.inbox.length + ")");
+      state.inbox.forEach(function (id) { lines.push("- " + id + " " + TITLE[id]); });
+      lines.push("");
+    }
+    return lines.join("\n").replace(/\n+$/, "\n");
+  }
+
+  function renderExport() {
+    var total = TICKETS.length;
+    var rows = OUTPUT_LANES.concat(state.inbox.length ? ["inbox"] : []);
+    document.getElementById("summaryBody").innerHTML = rows.map(function (k) {
+      var n = state[k].length;
+      var pct = Math.round((n / total) * 100) + "%";
+      var ids = n ? state[k].map(esc).join(", ") : '<span class="none">None</span>';
+      return '<tr><td><span class="bucket"><i style="background:' + COLOR[k] + '"></i>' + LABEL[k] +
+        '</span></td><td class="num">' + n + '</td><td class="num">' + pct + '</td><td class="ids">' + ids + "</td></tr>";
+    }).join("");
+    document.getElementById("md").value = markdown();
+    var warn = document.getElementById("warn");
+    var left = state.inbox.length;
+    if (left) {
+      warn.textContent = left + " ticket" + (left === 1 ? " is" : "s are") +
+        " still untriaged. They are listed under “Untriaged” in the export.";
+      warn.classList.add("show");
+    } else {
+      warn.classList.remove("show");
+    }
+  }
+
+  var toastTimer;
+  function toast(msg) {
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove("show"); }, 1800);
+  }
+
+  function copyMarkdown() {
+    var text = markdown();
+    function fallback() {
+      var ta = document.getElementById("md");
+      ta.focus();
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) {}
+      toast(ok ? "Markdown copied" : "Press Ctrl+C to copy the selected markdown");
+    }
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(function () { toast("Markdown copied"); }, fallback);
+    } else {
+      fallback();
+    }
+  }
+
+  function downloadMarkdown() {
+    var blob = new Blob([markdown()], { type: "text/markdown;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "triage-result.md";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  /* ---------- Click & keyboard ---------- */
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest(".mv button[data-to]");
+    if (!b) return;
+    var card = b.closest(".card");
+    var id = card.dataset.id;
+    move(id, b.dataset.to);
+    render();
+    announce(id + " moved to " + LABEL[b.dataset.to]);
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var card = e.target.closest && e.target.closest(".card");
+    if (!card || e.target !== card) return;
+    var id = card.dataset.id;
+    var lane = laneOf(id);
+
+    if (KEYMAP[e.key] && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      var to = KEYMAP[e.key];
+      if (to === lane) return;
+      move(id, to);
+      render(id);
+      announce(id + " moved to " + LABEL[to]);
+      return;
+    }
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      var arr = state[lane];
+      var i = arr.indexOf(id);
+      var j = e.key === "ArrowUp" ? i - 1 : i + 1;
+      if (j < 0 || j >= arr.length) return;
+      if (e.altKey) {
+        arr.splice(i, 1);
+        arr.splice(j, 0, id);
+        render(id);
+        announce(id + " position " + (j + 1) + " of " + arr.length + " in " + LABEL[lane]);
+      } else {
+        var other = document.querySelector('.card[data-id="' + arr[j] + '"]');
+        if (other) other.focus();
+      }
+    }
+  });
+
+  /* ---------- Drag and drop ---------- */
+  var dragId = null;
+  var ph = document.createElement("div");
+  ph.className = "placeholder";
+
+  function clearDrag() {
+    ph.remove();
+    document.querySelectorAll(".lane.over").forEach(function (l) { l.classList.remove("over"); });
+    document.querySelectorAll(".card.dragging").forEach(function (c) { c.classList.remove("dragging"); });
+    dragId = null;
+  }
+
+  function nextCard(list, x, y) {
+    var axis = list.dataset.axis;
+    var cards = Array.prototype.slice.call(list.querySelectorAll(".card:not(.dragging)"));
+    for (var i = 0; i < cards.length; i++) {
+      var r = cards[i].getBoundingClientRect();
+      if (axis === "y") {
+        if (y < r.top + r.height / 2) return cards[i];
+      } else {
+        if (y < r.top || (y <= r.bottom && x < r.left + r.width / 2)) return cards[i];
+      }
+    }
+    return null;
+  }
+
+  document.addEventListener("dragstart", function (e) {
+    var c = e.target.closest && e.target.closest(".card");
+    if (!c) return;
+    dragId = c.dataset.id;
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", dragId); } catch (err) {}
+    requestAnimationFrame(function () { c.classList.add("dragging"); });
+  });
+  document.addEventListener("dragend", clearDrag);
+
+  document.querySelectorAll(".lane").forEach(function (lane) {
+    var list = lane.querySelector(".list");
+    lane.addEventListener("dragover", function (e) {
+      if (!dragId) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      document.querySelectorAll(".lane.over").forEach(function (l) { if (l !== lane) l.classList.remove("over"); });
+      lane.classList.add("over");
+      var after = nextCard(list, e.clientX, e.clientY);
+      if (after) {
+        if (ph.nextSibling !== after) list.insertBefore(ph, after);
+      } else {
+        var empty = list.querySelector(".empty");
+        if (ph.parentNode !== list || ph.nextSibling !== empty) list.insertBefore(ph, empty);
+      }
+    });
+    lane.addEventListener("dragleave", function (e) {
+      if (!lane.contains(e.relatedTarget)) {
+        lane.classList.remove("over");
+        if (ph.parentNode === list) ph.remove();
+      }
+    });
+    lane.addEventListener("drop", function (e) {
+      if (!dragId) return;
+      e.preventDefault();
+      var idx = 0;
+      if (ph.parentNode === list) {
+        for (var n = list.firstChild; n && n !== ph; n = n.nextSibling) {
+          if (n.classList && n.classList.contains("card") && !n.classList.contains("dragging")) idx++;
+        }
+      } else {
+        idx = null;
+      }
+      var id = dragId;
+      var to = lane.dataset.lane;
+      clearDrag();
+      move(id, to, idx);
+      render();
+      announce(id + " moved to " + LABEL[to]);
+    });
+  });
+
+  /* ---------- Toolbar ---------- */
+  document.getElementById("copyBtn").addEventListener("click", copyMarkdown);
+  document.getElementById("copyTopBtn").addEventListener("click", copyMarkdown);
+  document.getElementById("downloadBtn").addEventListener("click", downloadMarkdown);
+  document.getElementById("jumpBtn").addEventListener("click", function () {
+    document.getElementById("export").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  document.getElementById("resetBtn").addEventListener("click", function () {
+    if (!confirm("Move all tickets back to Untriaged?")) return;
+    state = fresh();
+    render();
+    toast("Board reset");
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

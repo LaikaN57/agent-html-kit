@@ -1,0 +1,21 @@
+{
+  "model": "claude-opus-5-5",
+  "output_tokens": 653,
+  "thinking_tokens": 100,
+  "artifact_tokens": 553,
+  "input_tokens": 2,
+  "cache_creation_tokens": 3033,
+  "cache_read_tokens": 535,
+  "total_input_tokens": 3570,
+  "cost_usd": 0.037439,
+  "duration_ms": 6054,
+  "duration_api_ms": 6009,
+  "wall_s": 9.0,
+  "num_turns": 1,
+  "claude_code_version": null,
+  "scenario": "board",
+  "format": "D",
+  "run": 1,
+  "fenced": false,
+  "chars": 1239
+}

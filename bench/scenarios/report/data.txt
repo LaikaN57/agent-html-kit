@@ -1,0 +1,14 @@
+Report: Weekly engineering status, team Checkout, week 41.
+Headline numbers: 23 PRs merged, 2 incidents, p95 checkout latency 412 ms (was 530 ms), test coverage 78%.
+PRs merged per day: Mon 3, Tue 6, Wed 4, Thu 7, Fri 3.
+Work items:
+- CHK-101 Apple Pay button | owner: frontend | status: done | note: shipped behind flag
+- CHK-102 Address autocomplete | owner: frontend | status: in progress | note: waiting on API quota
+- CHK-103 Retry queue for payment webhooks | owner: backend | status: done | note: cut duplicate charges to zero in staging
+- CHK-104 Fraud score threshold tuning | owner: data | status: blocked | note: needs legal sign-off
+- CHK-105 Cart service p95 latency | owner: backend | status: done | note: 530 ms to 412 ms
+- CHK-106 Guest checkout A/B test | owner: product | status: in progress | note: 40% of traffic enrolled
+Risks:
+1. Fraud tuning blocked on legal; could slip the November release.
+2. Autocomplete API quota resets monthly; a spike would disable the feature.
+Next week: finish autocomplete, get legal answer on fraud thresholds, read out A/B results.

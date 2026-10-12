@@ -1,0 +1,238 @@
+<!doctype html><meta charset="utf-8"><script src="kit/kit.js" defer></script>
+
+<rk-header title="pricing.py: quote() implementation plan" sub="Self-contained spec for one pure function that prices a cart in integer cents. Every rule, number, error message and edge case is listed here."></rk-header>
+
+<rk-stats>
+1 | public function | quote(cart, region, coupon=None, member=False)
+5 | output keys | subtotal, discount, shipping, tax, total
+3 | regions | US, EU, UK
+2 | coupon codes | SAVE10, FLAT500
+3 | error messages | all ValueError
+0 | floats allowed | !integer cents only
+</rk-stats>
+
+<h2>1. Contract</h2>
+
+<p>Create a module **pricing.py** with exactly one public function:</p>
+<p>`quote(cart, region, coupon=None, member=False) -> dict`</p>
+
+<rk-table>
+Parameter | Type | Meaning
+cart | list of dict | Each item has keys `sku` (str), `price` (int, cents, per unit), `qty` (int), `category` (str). Can be an empty list.
+region | str | Must be exactly `"US"`, `"EU"` or `"UK"`. This check is case-sensitive.
+coupon | str or None | Optional coupon code. `None` means no coupon. The code is case-insensitive, and surrounding whitespace is ignored.
+member | bool | Whether the customer is a member. The default is `False`.
+</rk-table>
+
+<p>The function returns a dict with **exactly** these five keys, all plain Python `int` values in cents and no other keys: `subtotal`, `discount`, `shipping`, `tax`, `total`.</p>
+
+<rk-callout kind="warn" title="Money is integer cents everywhere">All inputs and outputs are integer cents. Do not use float at any point, including for percentages. Use the integer half-up helper described in section 5. Do not use Python's built-in round(), because it does banker's rounding: round(234.5) gives 234, but we need 235.</rk-callout>
+
+<h2>2. Calculation flow</h2>
+
+<rk-diagram title="quote() calculation order">
+Caller [user] -> Validate region: cart, region, coupon, member
+Validate region -> Error [ext]: region not US/EU/UK, raise "unsupported region"
+Validate region -> Validate qty: region ok
+Validate qty -> Error [ext]: any item qty below 1, raise "invalid qty"
+Validate qty -> Empty cart check: all qty ok
+Empty cart check -> Result [db]: cart empty, return all five as 0
+Empty cart check -> Subtotal [svc]: cart non-empty
+Subtotal [svc] -> Eligible amount [svc]: sum price*qty, all items
+Eligible amount [svc] -> Coupon discount [svc]: sum price*qty, non gift-card items
+Coupon discount [svc] -> Error [ext]: unknown code, raise "unknown coupon"
+Coupon discount [svc] -> Member discount [svc]: SAVE10 / FLAT500 / none
+Member discount [svc] -> Shipping [svc]: discount = coupon + member
+Shipping [svc] -> Tax [svc]: free, 599 or 899
+Tax [svc] -> Total [svc]: rate on eligible - discount + shipping
+Total [svc] -> Result [db]: subtotal - discount + shipping + tax
+</rk-diagram>
+
+<h2>3. Rules</h2>
+
+<h3>3.1 Validation (always first, in this order)</h3>
+
+<p>Run validation before any other logic, and before the empty-cart shortcut. Check the region first, then the items. The first failure raises its error.</p>
+
+<rk-table>
+Order | Condition | Raise
+1 | `region` is not one of `"US"`, `"EU"`, `"UK"` (exact, case-sensitive match, so `"us"` fails) | `ValueError("unsupported region")`
+2 | Any item in the cart has `qty < 1` (check every item) | `ValueError("invalid qty")`
+</rk-table>
+
+<p>Error messages must match these strings exactly, with no extra text.</p>
+
+<h3>3.2 Empty cart</h3>
+
+<p>If validation passes and the cart is empty, return `{"subtotal": 0, "discount": 0, "shipping": 0, "tax": 0, "total": 0}`. An empty cart is **not** charged shipping.</p>
+
+<h3>3.3 Subtotal and eligible amount</h3>
+
+<rk-table>
+Value | Definition
+subtotal | Sum of `price * qty` over **all** items, gift cards included
+eligible | Sum of `price * qty` over items whose `category != "gift-card"`
+</rk-table>
+
+<p>Gift cards (category exactly `"gift-card"`) count toward the subtotal and toward the free-shipping threshold. They are never discounted and never taxed.</p>
+
+<h3>3.4 Coupon discount</h3>
+
+<p>Normalise the code with `coupon.strip().upper()`. Only do this when `coupon is not None`.</p>
+
+<rk-table>
+Normalised code | Coupon discount | Condition
+(coupon is None) | 0 | No coupon applied
+SAVE10 | half_up(eligible × 10 / 100) | Always applies; is 0 if eligible is 0
+FLAT500 | 500 | Only when eligible ≥ 3000; otherwise 0, and no error is raised
+anything else | (none) | Raise `ValueError("unknown coupon")`
+</rk-table>
+
+<p>Examples of valid inputs: `"save10"`, `"  Save10 "`, `"\tflat500\n"`. Examples of inputs that raise "unknown coupon": `""`, `"   "`, `"SAVE 10"`, `"SAVE5"`.</p>
+
+<h3>3.5 Member discount</h3>
+
+<rk-table>
+member | Member discount
+False | 0
+True | half_up((eligible − coupon_discount) × 5 / 100)
+</rk-table>
+
+<p>The member discount is applied after the coupon and uses the eligible amount minus the coupon discount as its base. The returned **discount** is `coupon_discount + member_discount`. Gift cards are never part of either base.</p>
+
+<h3>3.6 Shipping</h3>
+
+<rk-table>
+Condition (check in this order) | Shipping
+member is True | 0
+subtotal − discount ≥ 5000 | 0
+region US | 599
+region EU | 899
+region UK | 899
+</rk-table>
+
+<p>Note that the threshold uses the **subtotal** (gift cards included), not the eligible amount, and the comparison is **≥**, so exactly 5000 qualifies.</p>
+
+<h3>3.7 Tax</h3>
+
+<rk-table>
+Region | Tax rate
+US | 7 %
+EU | 20 %
+UK | 20 %
+</rk-table>
+
+<p>Compute `tax_base = eligible − discount + shipping`, then `tax = half_up(tax_base × rate / 100)`. Shipping is taxed. Gift cards are excluded because the base starts from the eligible amount. This means a gift-card-only cart that pays shipping still pays tax on the shipping.</p>
+
+<h3>3.8 Total</h3>
+
+<p>`total = subtotal − discount + shipping + tax`.</p>
+
+<h2>4. Constants</h2>
+
+<rk-table>
+Name | Value
+SUPPORTED_REGIONS | US, EU, UK
+SHIPPING_FEE | US: 599, EU: 899, UK: 899
+TAX_RATE_PERCENT | US: 7, EU: 20, UK: 20
+FREE_SHIPPING_THRESHOLD | 5000
+GIFT_CARD_CATEGORY | gift-card
+SAVE10_PERCENT | 10
+FLAT500_AMOUNT | 500
+FLAT500_MIN_ELIGIBLE | 3000
+MEMBER_PERCENT | 5
+</rk-table>
+
+<h2>5. Rounding rule</h2>
+
+<p>Every percentage result is rounded half up to a whole cent at the moment it is computed. This applies to three values: the SAVE10 discount, the member discount and the tax. Do not carry fractions forward to later steps. Each rounded value is used as-is in the steps that follow.</p>
+
+<p>Implement this as a private integer helper: `_pct_half_up(amount, percent) = (amount * percent + 50) // 100`. All bases are non-negative for valid carts, so this formula is exact half-up. It uses no float and no `round()`.</p>
+
+<rk-table>
+Input | Exact value | half_up | Python round() (wrong)
+2345 × 10% | 234.5 | 235 | 234
+2110 × 5% | 105.5 | 106 | 106
+3099 × 7% | 216.93 | 217 | 217
+2004 × 20% | 400.8 | 401 | 401
+50 × 5% | 2.5 | 3 | 2
+</rk-table>
+
+<h2>6. Implementation steps</h2>
+
+<rk-steps>
+Create module | Create pricing.py with the module constants from section 4 and a private helper _pct_half_up(amount, percent) that uses integer math only.
+Validate region | If region not in SUPPORTED_REGIONS, raise ValueError("unsupported region"). Do this before looking at the cart.
+Validate quantities | Loop over all items. If any item qty is below 1, raise ValueError("invalid qty").
+Empty cart shortcut | If the cart is empty, return the five keys, all set to 0.
+Compute subtotal and eligible | Subtotal is the sum of price*qty over all items. Eligible is the same sum, skipping items whose category is "gift-card".
+Resolve coupon | If coupon is None, the coupon discount is 0. Otherwise normalise with strip().upper(). For SAVE10, use the 10 percent half-up value of eligible. For FLAT500, use 500 if eligible is at least 3000, else 0. For any other code, raise ValueError("unknown coupon").
+Member discount | If member is True, apply 5 percent half-up to (eligible minus coupon discount). Otherwise use 0. Set discount = coupon + member.
+Shipping | Shipping is 0 if member is True or if subtotal minus discount is at least 5000. Otherwise use SHIPPING_FEE for the region.
+Tax | Apply TAX_RATE_PERCENT for the region, half-up, to (eligible minus discount plus shipping).
+Total and return | Set total = subtotal - discount + shipping + tax. Return a dict with exactly subtotal, discount, shipping, tax and total, all as int.
+Tests | Add unit tests covering every worked example in section 7 and every error case in section 8.
+</rk-steps>
+
+<h2>7. Worked examples</h2>
+
+<p>Items are written as `price × qty (category)`. All amounts are in cents.</p>
+
+<rk-table>
+# | Inputs | subtotal | eligible | discount | shipping | tax | total
+E1 | US, no coupon, non-member; 1000×2 (general), 500×1 (general) | 2500 | 2500 | 0 | 599 | 217 | 3316
+E2 | EU, coupon "SAVE10", member; 2345×1 (apparel), 5000×1 (gift-card) | 7345 | 2345 | 341 | 0 | 401 | 7405
+E3 | UK, coupon " flat500 ", non-member; 1500×2 (books) | 3000 | 3000 | 500 | 899 | 680 | 4079
+E4 | US, coupon "FLAT500", non-member; 2999×1 (books) | 2999 | 2999 | 0 | 599 | 252 | 3850
+E5 | US, coupon "SAVE10", non-member; 5556×1 (general) | 5556 | 5556 | 556 | 0 | 350 | 5350
+E6 | US, no coupon, non-member; 5000×1 (gift-card) | 5000 | 0 | 0 | 0 | 0 | 5000
+E7 | US, no coupon, non-member; 1000×1 (gift-card) | 1000 | 0 | 0 | 599 | 42 | 1641
+E8 | EU, empty cart, any member value | 0 | 0 | 0 | 0 | 0 | 0
+</rk-table>
+
+<h3>Derivations</h3>
+<ul>
+<li>**E1**: There is no discount. 2500 is below 5000, so shipping is the US fee of 599. Tax base is 2500 + 599 = 3099. 7% of 3099 is 216.93, which rounds to 217. Total is 2500 + 599 + 217 = 3316.</li>
+<li>**E2**: SAVE10 on 2345 gives 234.5, which rounds half up to **235** (Python's round() would give 234). The member base is 2345 − 235 = 2110. 5% of 2110 is 105.5, which rounds to 106. Discount is 235 + 106 = 341. Shipping is free because the customer is a member. Tax base is 2345 − 341 + 0 = 2004. 20% of 2004 is 400.8, which rounds to 401. Total is 7345 − 341 + 0 + 401 = 7405. The gift card is never discounted or taxed.</li>
+<li>**E3**: The coupon " flat500 " normalises to FLAT500. Eligible is 3000, which meets the ≥ 3000 condition, so the discount is 500. Subtotal minus discount is 2500, below 5000, so UK shipping of 899 applies. Tax base is 3000 − 500 + 899 = 3399. 20% of 3399 is 679.8, which rounds to 680. Total is 3000 − 500 + 899 + 680 = 4079.</li>
+<li>**E4**: Eligible is 2999, below 3000, so FLAT500 gives 0 and raises no error. Shipping is 599. Tax base is 2999 + 599 = 3598. 7% of 3598 is 251.86, which rounds to 252. Total is 3850.</li>
+<li>**E5**: SAVE10 on 5556 gives 555.6, which rounds to 556. Subtotal minus discount is exactly 5000, which meets the ≥ threshold, so shipping is free. Tax base is 5000. 7% of 5000 is 350. Total is 5556 − 556 + 0 + 350 = 5350.</li>
+<li>**E6**: The cart holds only a gift card. Subtotal minus discount is 5000, so shipping is free. Tax base is 0 − 0 + 0 = 0, so tax is 0. Total is 5000.</li>
+<li>**E7**: The cart holds only a gift card. Subtotal minus discount is 1000, below 5000, so shipping is 599. Tax base is 0 − 0 + 599 = 599. 7% of 599 is 41.93, which rounds to 42. Total is 1000 + 599 + 42 = 1641. Shipping is taxed even though the goods are not.</li>
+<li>**E8**: Validation passes, so the empty-cart shortcut returns all five values as 0. No shipping is charged.</li>
+</ul>
+
+<h2>8. Error and edge cases</h2>
+
+<rk-table>
+# | Inputs | Expected
+X1 | region "CA", any cart | ValueError("unsupported region")
+X2 | region "us" (lowercase) | ValueError("unsupported region"), because region matching is case-sensitive
+X3 | region "CA", item with qty 0 | ValueError("unsupported region"), because region is checked first
+X4 | region "XX", empty cart | ValueError("unsupported region"), because validation runs before the empty shortcut
+X5 | region "US", one item with qty 0 | ValueError("invalid qty")
+X6 | region "US", one item with qty -3 among valid items | ValueError("invalid qty")
+X7 | region "US", non-empty cart, coupon "SAVE20" | ValueError("unknown coupon")
+X8 | region "US", non-empty cart, coupon "" or "   " | ValueError("unknown coupon"), because only None means no coupon
+X9 | coupon "save10" or "  SaVe10 " | Accepted as SAVE10
+X10 | Member with FLAT500, eligible 3000 | Member base is 2500, member discount is 125, total discount is 625
+</rk-table>
+
+<rk-callout kind="note" title="Decision: unknown coupon on an empty cart">The requirements list only the region and qty checks as up-front validation, and say an empty cart returns zeros right after validation. So with an empty cart, the coupon is never parsed, and quote([], "US", coupon="BOGUS") returns all zeros without raising. Implement it this way and cover it with a test. The PM has not confirmed this explicitly, so the test name should make the behaviour obvious in case it needs to change.</rk-callout>
+
+<rk-callout kind="warn" title="Out of scope">The requirements do not specify behaviour for missing item keys, non-int prices or quantities, negative prices, or a coupon that is not a string. Do not add validation for these. Assume well-typed input beyond the checks listed above.</rk-callout>
+
+<h2>9. Test checklist</h2>
+
+<rk-table>
+ID | Test | Status
+TST-1 | E1 to E8 match the table exactly, comparing the full returned dict | [todo]
+TST-2 | Returned dict has exactly 5 keys and every value is type int | [todo]
+TST-3 | X1 to X8 raise ValueError with the exact message | [todo]
+TST-4 | Half-up at .5: SAVE10 on 2345 gives 235, not 234 | [todo]
+TST-5 | Free-shipping boundary: subtotal minus discount of 4999 gives a fee; 5000 gives free | [todo]
+TST-6 | FLAT500 boundary: eligible 2999 gives 0; 3000 gives 500 | [todo]
+TST-7 | Gift card counts toward the shipping threshold but not toward the discount or tax base | [todo]
+TST-8 | Empty cart with unknown coupon returns zeros | [todo]
+TST-9 | No float or round() used in pricing.py (code review check) | [todo]
+</rk-table>

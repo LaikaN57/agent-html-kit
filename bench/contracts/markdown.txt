@@ -1,0 +1,13 @@
+Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
+- The first "# Title" becomes the page hero.
+- A line "stats: value label | value label | ..." becomes stat cards.
+- Status pills anywhere, including table cells: [done] [progress] [blocked] [todo] [warn].
+- IDs like ABC-123 become chips.
+- Blockquotes starting "Risk:", "Warning:", "Note:" or "OK:" become colored callouts.
+- Fenced blocks by language:
+  chart    optional header lines "title: ...", "type: bar|line|hbar", "unit: ms", then "Label: number" lines
+  diagram  optional "title: ...", then one edge per line "A -> B: label";
+           node kinds [user] [svc] [db] [queue] [cache] [ext], e.g. "Browser [user] -> API: HTTPS"
+  steps    numbered steps, one per line "Title | detail"
+  board    "title: ...", "columns: Now,Next,Later,Cut", then "ID | title | column" lines;
+           renders a drag-and-drop board with markdown export (items without a column start in Inbox)

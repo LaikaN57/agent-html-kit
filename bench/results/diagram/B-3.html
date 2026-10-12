@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Checkout Platform: Architecture Overview</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --panel: #ffffff;
+    --ink: #1d2433;
+    --muted: #5d6679;
+    --line: #9aa3b5;
+    --accent: #3b5bdb;
+    --accent-soft: #e7ecff;
+    --client: #e8f4ff;   --client-b: #4a90d9;
+    --edge: #f3eaff;     --edge-b: #8a5cd6;
+    --svc: #e9f8ef;      --svc-b: #2f9e5b;
+    --data: #fff4e0;     --data-b: #d98b1a;
+    --ext: #fdecec;      --ext-b: #d64545;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+  }
+  header {
+    background: linear-gradient(135deg, #24315e 0%, #3b5bdb 100%);
+    color: #fff;
+    padding: 40px 24px 36px;
+  }
+  header .wrap { max-width: 1200px; margin: 0 auto; }
+  header h1 { margin: 0 0 6px; font-size: 2rem; letter-spacing: -0.01em; }
+  header p { margin: 0; opacity: 0.85; max-width: 760px; }
+  main { max-width: 1200px; margin: 0 auto; padding: 28px 24px 60px; }
+  section {
+    background: var(--panel);
+    border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgba(20,30,60,.08), 0 6px 24px rgba(20,30,60,.05);
+    padding: 26px 28px;
+    margin-bottom: 26px;
+  }
+  h2 { margin: 0 0 4px; font-size: 1.35rem; }
+  h2 + .sub { color: var(--muted); margin: 0 0 18px; font-size: .95rem; }
+  nav.toc { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  nav.toc a {
+    color: #fff; text-decoration: none; font-size: .88rem;
+    background: rgba(255,255,255,.14); padding: 6px 12px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,.25);
+  }
+  nav.toc a:hover { background: rgba(255,255,255,.26); }
+
+  /* Diagram */
+  .diagram-wrap { display: grid; grid-template-columns: 1fr 280px; gap: 20px; align-items: start; }
+  @media (max-width: 980px) { .diagram-wrap { grid-template-columns: 1fr; } }
+  .svg-box {
+    border: 1px solid #e3e6ee; border-radius: 10px; background:
+      radial-gradient(circle, #e4e8f2 1px, transparent 1px) 0 0 / 18px 18px, #fbfcfe;
+    overflow-x: auto;
+  }
+  svg.arch { display: block; width: 100%; min-width: 900px; height: auto; }
+  .node rect { stroke-width: 2; rx: 10; ry: 10; transition: filter .15s, opacity .2s; }
+  .node text { font-size: 14px; font-weight: 600; fill: var(--ink); pointer-events: none; }
+  .node text.sub { font-size: 11px; font-weight: 400; fill: var(--muted); }
+  .node { cursor: pointer; transition: opacity .2s; }
+  .node:hover rect { filter: drop-shadow(0 3px 6px rgba(30,40,80,.25)); }
+  .node.client rect { fill: var(--client); stroke: var(--client-b); }
+  .node.edgeg rect  { fill: var(--edge);   stroke: var(--edge-b); }
+  .node.svc rect    { fill: var(--svc);    stroke: var(--svc-b); }
+  .node.data rect   { fill: var(--data);   stroke: var(--data-b); }
+  .node.ext rect    { fill: var(--ext);    stroke: var(--ext-b); stroke-dasharray: 6 4; }
+  .node.core rect   { stroke-width: 3; }
+
+  .edge path { fill: none; stroke: var(--line); stroke-width: 2; transition: stroke .2s, opacity .2s, stroke-width .2s; }
+  .edge .lbl rect { fill: #fff; stroke: #d5dae5; stroke-width: 1; rx: 6; ry: 6; transition: stroke .2s, fill .2s; }
+  .edge .lbl text { font-size: 11px; fill: #3a4256; text-anchor: middle; dominant-baseline: middle; }
+  .edge .lbl text .proto { font-weight: 700; fill: var(--accent); }
+  .edge { transition: opacity .2s; }
+
+  svg.focus .edge, svg.focus .node { opacity: .18; }
+  svg.focus .edge.on, svg.focus .node.on { opacity: 1; }
+  .edge.on path { stroke: var(--accent); stroke-width: 3; }
+  .edge.on .lbl rect { stroke: var(--accent); fill: var(--accent-soft); }
+
+  .side { display: flex; flex-direction: column; gap: 14px; }
+  .card {
+    border: 1px solid #e3e6ee; border-radius: 10px; padding: 14px 16px; background: #fcfdff;
+  }
+  .card h3 { margin: 0 0 8px; font-size: .95rem; }
+  .legend { list-style: none; margin: 0; padding: 0; font-size: .87rem; }
+  .legend li { display: flex; align-items: center; gap: 9px; margin: 6px 0; }
+  .sw { width: 20px; height: 14px; border-radius: 4px; border: 2px solid; flex: none; }
+  .sw.client { background: var(--client); border-color: var(--client-b); }
+  .sw.edgeg  { background: var(--edge); border-color: var(--edge-b); }
+  .sw.svc    { background: var(--svc); border-color: var(--svc-b); }
+  .sw.data   { background: var(--data); border-color: var(--data-b); }
+  .sw.ext    { background: var(--ext); border-color: var(--ext-b); border-style: dashed; }
+  #info { font-size: .88rem; min-height: 140px; }
+  #info .title { font-weight: 700; font-size: 1rem; margin-bottom: 2px; }
+  #info .kind { color: var(--muted); font-size: .8rem; margin-bottom: 8px; }
+  #info ul { margin: 6px 0 0; padding-left: 18px; }
+  #info li { margin: 3px 0; }
+  .hint { color: var(--muted); font-size: .84rem; margin: 0; }
+  button.btn {
+    font: inherit; font-size: .85rem; cursor: pointer;
+    border: 1px solid #cfd5e3; background: #fff; color: var(--ink);
+    padding: 6px 12px; border-radius: 8px;
+  }
+  button.btn:hover { border-color: var(--accent); color: var(--accent); }
+  button.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.btn.primary:hover { background: #2f4bc0; color: #fff; }
+
+  /* Rule callout */
+  .rule {
+    display: flex; gap: 14px; align-items: flex-start;
+    background: #fff8e6; border: 1px solid #f1d38a; border-left: 5px solid #e0a210;
+    border-radius: 10px; padding: 14px 18px; margin-top: 18px;
+  }
+  .rule .icon {
+    flex: none; width: 28px; height: 28px; border-radius: 50%;
+    background: #e0a210; color: #fff; font-weight: 800; display: grid; place-items: center;
+  }
+  .rule p { margin: 0; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .9rem; }
+  thead th {
+    text-align: left; background: #eef1f8; color: #39425a; font-weight: 600;
+    padding: 10px 12px; border-bottom: 1px solid #dde2ec;
+  }
+  thead th:first-child { border-top-left-radius: 8px; }
+  thead th:last-child { border-top-right-radius: 8px; }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid #edf0f5; vertical-align: top; }
+  tbody tr:nth-child(even) td { background: #fafbfd; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover td { background: var(--accent-soft); }
+  td.num { color: var(--muted); width: 40px; }
+  .pill {
+    display: inline-block; font-size: .75rem; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .pill.none { background: #f0f1f4; color: #8a91a3; font-weight: 500; }
+  .tag { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; border: 2px solid; vertical-align: -1px; }
+
+  /* Walkthrough */
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
+  .controls .status { color: var(--muted); font-size: .85rem; margin-left: 6px; }
+  ol.steps { list-style: none; counter-reset: s; margin: 0; padding: 0; }
+  ol.steps li {
+    counter-increment: s; position: relative; padding: 12px 14px 12px 56px; margin: 0 0 8px;
+    border: 1px solid #e6e9f1; border-radius: 10px; cursor: pointer; background: #fff;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+  }
+  ol.steps li::before {
+    content: counter(s); position: absolute; left: 14px; top: 12px;
+    width: 28px; height: 28px; border-radius: 50%; background: #eef1f8; color: #39425a;
+    display: grid; place-items: center; font-weight: 700; font-size: .9rem;
+  }
+  ol.steps li:hover { border-color: #b9c4ea; }
+  ol.steps li.active { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 2px 10px rgba(59,91,219,.15); }
+  ol.steps li.active::before { background: var(--accent); color: #fff; }
+  ol.steps li.gate { border-left: 4px solid #e0a210; }
+  ol.steps li strong { display: block; margin-bottom: 2px; }
+  ol.steps li span.d { color: #444c60; font-size: .92rem; }
+  code { font-family: Consolas, "Cascadia Mono", Menlo, monospace; font-size: .86em; background: #f0f2f7; padding: 1px 5px; border-radius: 4px; }
+
+  ul.gaps { margin: 0; padding-left: 20px; }
+  ul.gaps li { margin: 6px 0; }
+  footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 0 0 30px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <h1>Checkout Platform: Architecture Overview</h1>
+    <p>An onboarding guide for new engineers: the components that make up the checkout platform, how they connect, and what happens during a single checkout.</p>
+    <nav class="toc">
+      <a href="#diagram">Diagram</a>
+      <a href="#components">Components</a>
+      <a href="#connections">Connections</a>
+      <a href="#walkthrough">Checkout walkthrough</a>
+      <a href="#gaps">Not specified</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<section id="diagram">
+  <h2>System diagram</h2>
+  <p class="sub">All 12 components and all 11 connections. Click a component to highlight its connections, or click empty space to reset.</p>
+
+  <div class="diagram-wrap">
+    <div class="svg-box">
+      <svg class="arch" id="arch" viewBox="0 0 1290 580" role="img" aria-label="Checkout platform architecture diagram">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#9aa3b5"/>
+          </marker>
+          <marker id="arrow-on" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#3b5bdb"/>
+          </marker>
+        </defs>
+
+        <!-- Edges (drawn first, beneath nodes) -->
+        <g class="edge" id="e1" data-from="web" data-to="gw">
+          <path d="M170,218 L250,276" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(210,247)"><rect/><text><tspan class="proto">HTTPS</tspan></text></g>
+        </g>
+        <g class="edge" id="e2" data-from="mobile" data-to="gw">
+          <path d="M170,358 L250,300" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(210,329)"><rect/><text><tspan class="proto">HTTPS</tspan></text></g>
+        </g>
+        <g class="edge" id="e3" data-from="gw" data-to="checkout">
+          <path d="M400,288 L490,288" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(445,288)"><rect/><text><tspan class="proto">gRPC</tspan></text></g>
+        </g>
+        <g class="edge" id="e4" data-from="checkout" data-to="cart">
+          <path d="M660,262 L850,48" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(755,155)"><rect/><text><tspan class="proto">gRPC</tspan> · loads the cart</text></g>
+        </g>
+        <g class="edge" id="e6" data-from="checkout" data-to="fraud">
+          <path d="M660,275 L850,168" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(755,221)"><rect/><text>asks for a fraud score</text></g>
+        </g>
+        <g class="edge" id="e7" data-from="checkout" data-to="payment">
+          <path d="M660,288 L850,288" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(755,288)"><rect/><text>charges the card</text></g>
+        </g>
+        <g class="edge" id="e9" data-from="checkout" data-to="pg">
+          <path d="M660,301 L850,408" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(755,354)"><rect/><text>writes the order</text></g>
+        </g>
+        <g class="edge" id="e10" data-from="checkout" data-to="kafka">
+          <path d="M660,314 L850,528" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(755,421)"><rect/><text>publishes order.created</text></g>
+        </g>
+        <g class="edge" id="e5" data-from="cart" data-to="redis">
+          <path d="M1000,48 L1120,48" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(1060,48)"><rect/><text><tspan x="0" dy="-6">reads and</tspan><tspan x="0" dy="12">writes carts</tspan></text></g>
+        </g>
+        <g class="edge" id="e8" data-from="payment" data-to="stripe">
+          <path d="M1000,288 L1120,288" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(1060,288)"><rect/><text><tspan x="0" dy="-6">payment</tspan><tspan x="0" dy="12">API call</tspan></text></g>
+        </g>
+        <g class="edge" id="e11" data-from="kafka" data-to="email">
+          <path d="M1000,528 L1120,528" marker-end="url(#arrow)"/>
+          <g class="lbl" transform="translate(1060,528)"><rect/><text><tspan x="0" dy="-6">consumes</tspan><tspan x="0" dy="12">order.created</tspan></text></g>
+        </g>
+
+        <!-- Nodes -->
+        <g class="node client" id="web"><rect x="20" y="190" width="150" height="56"/><text x="95" y="214" text-anchor="middle">Web app</text><text class="sub" x="95" y="232" text-anchor="middle">browser</text></g>
+        <g class="node client" id="mobile"><rect x="20" y="330" width="150" height="56"/><text x="95" y="363" text-anchor="middle">Mobile app</text></g>
+        <g class="node edgeg" id="gw"><rect x="250" y="260" width="150" height="56"/><text x="325" y="293" text-anchor="middle">API gateway</text></g>
+        <g class="node svc core" id="checkout"><rect x="490" y="250" width="170" height="76"/><text x="575" y="285" text-anchor="middle">Checkout service</text><text class="sub" x="575" y="304" text-anchor="middle">orchestrates checkout</text></g>
+        <g class="node svc" id="cart"><rect x="850" y="20" width="150" height="56"/><text x="925" y="53" text-anchor="middle">Cart service</text></g>
+        <g class="node svc" id="fraud"><rect x="850" y="140" width="150" height="56"/><text x="925" y="173" text-anchor="middle">Fraud service</text></g>
+        <g class="node svc" id="payment"><rect x="850" y="260" width="150" height="56"/><text x="925" y="293" text-anchor="middle">Payment service</text></g>
+        <g class="node data" id="pg"><rect x="850" y="380" width="150" height="56"/><text x="925" y="404" text-anchor="middle">Postgres</text><text class="sub" x="925" y="422" text-anchor="middle">orders database</text></g>
+        <g class="node data" id="kafka"><rect x="850" y="500" width="150" height="56"/><text x="925" y="524" text-anchor="middle">Kafka</text><text class="sub" x="925" y="542" text-anchor="middle">event bus</text></g>
+        <g class="node data" id="redis"><rect x="1120" y="20" width="150" height="56"/><text x="1195" y="44" text-anchor="middle">Redis</text><text class="sub" x="1195" y="62" text-anchor="middle">cart cache</text></g>
+        <g class="node ext" id="stripe"><rect x="1120" y="260" width="150" height="56"/><text x="1195" y="284" text-anchor="middle">Stripe</text><text class="sub" x="1195" y="302" text-anchor="middle">external payment provider</text></g>
+        <g class="node svc" id="email"><rect x="1120" y="500" width="150" height="56"/><text x="1195" y="533" text-anchor="middle">Email service</text></g>
+      </svg>
+    </div>
+
+    <div class="side">
+      <div class="card">
+        <h3>Legend</h3>
+        <ul class="legend">
+          <li><span class="sw client"></span>Client app</li>
+          <li><span class="sw edgeg"></span>Gateway</li>
+          <li><span class="sw svc"></span>Internal service</li>
+          <li><span class="sw data"></span>Data store / event bus</li>
+          <li><span class="sw ext"></span>External provider</li>
+          <li><svg width="34" height="10" aria-hidden="true"><line x1="0" y1="5" x2="26" y2="5" stroke="#9aa3b5" stroke-width="2"/><path d="M24,1 L32,5 L24,9 z" fill="#9aa3b5"/></svg>Connection (labelled)</li>
+        </ul>
+      </div>
+      <div class="card" id="info">
+        <p class="hint">Select a component in the diagram, a row in the tables below, or a walkthrough step to see details here.</p>
+      </div>
+      <button class="btn" id="resetBtn" type="button">Reset highlight</button>
+    </div>
+  </div>
+
+  <div class="rule">
+    <div class="icon">!</div>
+    <p><strong>Core rule:</strong> an order is only written (to Postgres) after the fraud score passes <em>and</em> the charge succeeds.</p>
+  </div>
+</section>
+
+<section id="components">
+  <h2>Components</h2>
+  <p class="sub">The 12 components of the checkout platform. Click a row to highlight it in the diagram.</p>
+  <table>
+    <thead><tr><th>#</th><th>Component</th><th>Description (as given)</th><th>Type</th></tr></thead>
+    <tbody id="compBody"></tbody>
+  </table>
+</section>
+
+<section id="connections">
+  <h2>Connections</h2>
+  <p class="sub">The 11 connections. Where no protocol was given, none is shown. Click a row to highlight it in the diagram.</p>
+  <table>
+    <thead><tr><th>#</th><th>From</th><th>To</th><th>Protocol</th><th>Purpose</th></tr></thead>
+    <tbody id="connBody"></tbody>
+  </table>
+</section>
+
+<section id="walkthrough">
+  <h2>Walkthrough: one checkout</h2>
+  <p class="sub">Step through a single checkout. Each step highlights the connections it uses in the diagram above.</p>
+  <div class="controls">
+    <button class="btn" id="prevBtn" type="button">◀ Prev</button>
+    <button class="btn primary" id="playBtn" type="button">▶ Play</button>
+    <button class="btn" id="nextBtn" type="button">Next ▶</button>
+    <span class="status" id="stepStatus">No step selected</span>
+  </div>
+  <ol class="steps" id="steps">
+    <li data-edges="e1,e2" data-nodes="web,mobile,gw">
+      <strong>Customer submits checkout</strong>
+      <span class="d">The customer checks out from the Web app (browser) or the Mobile app. Either client calls the API gateway over HTTPS.</span>
+    </li>
+    <li data-edges="e3" data-nodes="gw,checkout">
+      <strong>Gateway routes to Checkout service</strong>
+      <span class="d">The API gateway forwards the request to the Checkout service over gRPC. The Checkout service drives the remaining steps.</span>
+    </li>
+    <li data-edges="e4,e5" data-nodes="checkout,cart,redis">
+      <strong>Load the cart</strong>
+      <span class="d">The Checkout service loads the cart from the Cart service over gRPC. The Cart service reads and writes carts in Redis (the cart cache).</span>
+    </li>
+    <li data-edges="e6" data-nodes="checkout,fraud">
+      <strong>Get a fraud score</strong>
+      <span class="d">The Checkout service asks the Fraud service for a fraud score. The score must pass for the order to be written.</span>
+    </li>
+    <li data-edges="e7,e8" data-nodes="checkout,payment,stripe">
+      <strong>Charge the card</strong>
+      <span class="d">The Checkout service asks the Payment service to charge the card. The Payment service makes a payment API call to Stripe (external payment provider). The charge must succeed for the order to be written.</span>
+    </li>
+    <li class="gate" data-edges="e9" data-nodes="checkout,pg">
+      <strong>Write the order (gated)</strong>
+      <span class="d">Only if the fraud score passed <em>and</em> the charge succeeded does the Checkout service write the order to Postgres (the orders database).</span>
+    </li>
+    <li data-edges="e10" data-nodes="checkout,kafka">
+      <strong>Publish <code>order.created</code></strong>
+      <span class="d">The Checkout service publishes an <code>order.created</code> event to Kafka (the event bus).</span>
+    </li>
+    <li data-edges="e11" data-nodes="kafka,email">
+      <strong>Send the receipt</strong>
+      <span class="d">The Email service consumes <code>order.created</code> from Kafka and sends the receipt.</span>
+    </li>
+  </ol>
+</section>
+
+<section id="gaps">
+  <h2>Not specified in the source data</h2>
+  <p class="sub">This overview uses only the provided description. These details were not given, so they are deliberately left out of the diagram and walkthrough; ask the team before assuming them.</p>
+  <ul class="gaps">
+    <li>Protocols are given only for the client→gateway (HTTPS), gateway→Checkout (gRPC) and Checkout→Cart (gRPC) connections. The others have no stated protocol.</li>
+    <li>The relative order of the fraud check and the card charge. Only that both must pass/succeed before the order is written is specified.</li>
+    <li>What happens when the fraud score fails or the charge fails, beyond the order not being written.</li>
+    <li>Whether <code>order.created</code> is published before or after the Postgres write.</li>
+    <li>How the Email service actually delivers the receipt.</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>Checkout platform · architecture overview</footer>
+
+<script>
+(function () {
+  var NODES = {
+    web:      { name: "Web app",          desc: "Browser client",                kind: "Client app",            cls: "client" },
+    mobile:   { name: "Mobile app",       desc: "Mobile client",                 kind: "Client app",            cls: "client" },
+    gw:       { name: "API gateway",      desc: "Entry point for both clients",  kind: "Gateway",               cls: "edgeg" },
+    checkout: { name: "Checkout service", desc: "Coordinates cart, fraud, payment, order write and event publish", kind: "Internal service", cls: "svc" },
+    cart:     { name: "Cart service",     desc: "Serves carts; reads and writes them in Redis", kind: "Internal service", cls: "svc" },
+    fraud:    { name: "Fraud service",    desc: "Provides a fraud score",        kind: "Internal service",      cls: "svc" },
+    payment:  { name: "Payment service",  desc: "Charges the card via Stripe",   kind: "Internal service",      cls: "svc" },
+    email:    { name: "Email service",    desc: "Consumes order.created and sends the receipt", kind: "Internal service", cls: "svc" },
+    pg:       { name: "Postgres",         desc: "Orders database",               kind: "Data store",            cls: "data" },
+    redis:    { name: "Redis",            desc: "Cart cache",                    kind: "Data store",            cls: "data" },
+    kafka:    { name: "Kafka",            desc: "Event bus",                     kind: "Event bus",             cls: "data" },
+    stripe:   { name: "Stripe",           desc: "External payment provider",     kind: "External provider",     cls: "ext" }
+  };
+  var ORDER = ["web","mobile","gw","checkout","cart","fraud","payment","pg","redis","kafka","stripe","email"];
+
+  var EDGES = [
+    { id: "e1",  from: "web",      to: "gw",       proto: "HTTPS", purpose: "Client requests" },
+    { id: "e2",  from: "mobile",   to: "gw",       proto: "HTTPS", purpose: "Client requests" },
+    { id: "e3",  from: "gw",       to: "checkout", proto: "gRPC",  purpose: "Routes checkout requests" },
+    { id: "e4",  from: "checkout", to: "cart",     proto: "gRPC",  purpose: "Loads the cart" },
+    { id: "e5",  from: "cart",     to: "redis",    proto: "",      purpose: "Reads and writes carts" },
+    { id: "e6",  from: "checkout", to: "fraud",    proto: "",      purpose: "Asks for a fraud score" },
+    { id: "e7",  from: "checkout", to: "payment",  proto: "",      purpose: "Charges the card" },
+    { id: "e8",  from: "payment",  to: "stripe",   proto: "",      purpose: "Payment API call" },
+    { id: "e9",  from: "checkout", to: "pg",       proto: "",      purpose: "Writes the order (only after fraud score passes and charge succeeds)" },
+    { id: "e10", from: "checkout", to: "kafka",    proto: "",      purpose: "Publishes order.created" },
+    { id: "e11", from: "kafka",    to: "email",    proto: "",      purpose: "Email service consumes order.created and sends the receipt" }
+  ];
+
+  var svg = document.getElementById("arch");
+  var info = document.getElementById("info");
+  var swatchColor = { client: "#4a90d9", edgeg: "#8a5cd6", svc: "#2f9e5b", data: "#d98b1a", ext: "#d64545" };
+  var swatchFill  = { client: "#e8f4ff", edgeg: "#f3eaff", svc: "#e9f8ef", data: "#fff4e0", ext: "#fdecec" };
+
+  // Size label backgrounds to their text
+  svg.querySelectorAll(".lbl").forEach(function (g) {
+    var t = g.querySelector("text"), r = g.querySelector("rect");
+    var b = t.getBBox();
+    var px = 7, py = 4;
+    r.setAttribute("x", b.x - px);
+    r.setAttribute("y", b.y - py);
+    r.setAttribute("width", b.width + px * 2);
+    r.setAttribute("height", b.height + py * 2);
+  });
+
+  function esc(s) { return s.replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+
+  function clearHighlight() {
+    svg.classList.remove("focus");
+    svg.querySelectorAll(".on").forEach(function (el) { el.classList.remove("on"); });
+    svg.querySelectorAll(".edge path").forEach(function (p) { p.setAttribute("marker-end", "url(#arrow)"); });
+  }
+
+  function highlight(edgeIds, nodeIds) {
+    clearHighlight();
+    svg.classList.add("focus");
+    edgeIds.forEach(function (id) {
+      var e = document.getElementById(id);
+      if (!e) return;
+      e.classList.add("on");
+      e.querySelector("path").setAttribute("marker-end", "url(#arrow-on)");
+    });
+    nodeIds.forEach(function (id) {
+      var n = document.getElementById(id);
+      if (n) n.classList.add("on");
+    });
+  }
+
+  function edgeLine(e, perspective) {
+    var p = e.proto ? " <span class=\"pill\">" + e.proto + "</span>" : "";
+    var dir = perspective === e.from ? "→ " + NODES[e.to].name : "← " + NODES[e.from].name;
+    return "<li><strong>" + dir + "</strong>" + p + "<br>" + esc(e.purpose) + "</li>";
+  }
+
+  function showNode(id) {
+    var n = NODES[id];
+    var conns = EDGES.filter(function (e) { return e.from === id || e.to === id; });
+    var others = [id];
+    conns.forEach(function (e) { others.push(e.from, e.to); });
+    highlight(conns.map(function (e) { return e.id; }), others);
+    info.innerHTML =
+      "<div class=\"title\">" + n.name + "</div>" +
+      "<div class=\"kind\">" + n.kind + " · " + esc(n.desc) + "</div>" +
+      "<div>" + conns.length + " connection" + (conns.length === 1 ? "" : "s") + ":</div>" +
+      "<ul>" + conns.map(function (e) { return edgeLine(e, id); }).join("") + "</ul>";
+  }
+
+  function showEdge(e) {
+    highlight([e.id], [e.from, e.to]);
+    info.innerHTML =
+      "<div class=\"title\">" + NODES[e.from].name + " → " + NODES[e.to].name + "</div>" +
+      "<div class=\"kind\">Connection " + e.id.slice(1) + "</div>" +
+      "<div>Protocol: " + (e.proto ? "<span class=\"pill\">" + e.proto + "</span>" : "<span class=\"pill none\">not specified</span>") + "</div>" +
+      "<div style=\"margin-top:6px\">" + esc(e.purpose) + "</div>";
+  }
+
+  function reset() {
+    clearHighlight();
+    stopPlay();
+    setStep(-1);
+    info.innerHTML = "<p class=\"hint\">Select a component in the diagram, a row in the tables below, or a walkthrough step to see details here.</p>";
+  }
+
+  // Node clicks
+  svg.querySelectorAll(".node").forEach(function (g) {
+    g.addEventListener("click", function (ev) { ev.stopPropagation(); stopPlay(); setStep(-1); showNode(g.id); });
+  });
+  svg.querySelectorAll(".edge").forEach(function (g) {
+    g.style.cursor = "pointer";
+    g.addEventListener("click", function (ev) {
+      ev.stopPropagation(); stopPlay(); setStep(-1);
+      showEdge(EDGES.filter(function (e) { return e.id === g.id; })[0]);
+    });
+  });
+  svg.addEventListener("click", reset);
+  document.getElementById("resetBtn").addEventListener("click", reset);
+
+  // Tables
+  var compBody = document.getElementById("compBody");
+  ORDER.forEach(function (id, i) {
+    var n = NODES[id];
+    var tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td class=\"num\">" + (i + 1) + "</td>" +
+      "<td><span class=\"tag\" style=\"background:" + swatchFill[n.cls] + ";border-color:" + swatchColor[n.cls] + "\"></span><strong>" + n.name + "</strong></td>" +
+      "<td>" + esc(n.desc) + "</td>" +
+      "<td>" + n.kind + "</td>";
+    tr.addEventListener("click", function () {
+      stopPlay(); setStep(-1); showNode(id);
+      document.getElementById("diagram").scrollIntoView({ behavior: "smooth" });
+    });
+    compBody.appendChild(tr);
+  });
+
+  var connBody = document.getElementById("connBody");
+  EDGES.forEach(function (e, i) {
+    var tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td class=\"num\">" + (i + 1) + "</td>" +
+      "<td>" + NODES[e.from].name + "</td>" +
+      "<td>" + NODES[e.to].name + "</td>" +
+      "<td>" + (e.proto ? "<span class=\"pill\">" + e.proto + "</span>" : "<span class=\"pill none\">not specified</span>") + "</td>" +
+      "<td>" + esc(e.purpose) + "</td>";
+    tr.addEventListener("click", function () {
+      stopPlay(); setStep(-1); showEdge(e);
+      document.getElementById("diagram").scrollIntoView({ behavior: "smooth" });
+    });
+    connBody.appendChild(tr);
+  });
+
+  // Walkthrough
+  var steps = Array.prototype.slice.call(document.querySelectorAll("#steps li"));
+  var status = document.getElementById("stepStatus");
+  var playBtn = document.getElementById("playBtn");
+  var current = -1, timer = null;
+
+  function setStep(i) {
+    current = i;
+    steps.forEach(function (li, k) { li.classList.toggle("active", k === i); });
+    if (i < 0) { status.textContent = "No step selected"; return; }
+    var li = steps[i];
+    highlight(li.dataset.edges.split(","), li.dataset.nodes.split(","));
+    status.textContent = "Step " + (i + 1) + " of " + steps.length;
+    info.innerHTML =
+      "<div class=\"title\">Step " + (i + 1) + ": " + li.querySelector("strong").innerHTML + "</div>" +
+      "<div style=\"margin-top:6px\">" + li.querySelector(".d").innerHTML + "</div>";
+  }
+  function stopPlay() {
+    if (timer) { clearInterval(timer); timer = null; }
+    playBtn.textContent = "▶ Play";
+  }
+  steps.forEach(function (li, i) {
+    li.addEventListener("click", function () { stopPlay(); setStep(i); });
+  });
+  document.getElementById("nextBtn").addEventListener("click", function () {
+    stopPlay(); setStep(Math.min(current + 1, steps.length - 1));
+  });
+  document.getElementById("prevBtn").addEventListener("click", function () {
+    stopPlay(); setStep(Math.max(current - 1, 0));
+  });
+  playBtn.addEventListener("click", function () {
+    if (timer) { stopPlay(); return; }
+    playBtn.textContent = "❚❚ Pause";
+    if (current >= steps.length - 1) current = -1;
+    setStep(current + 1);
+    document.getElementById("diagram").scrollIntoView({ behavior: "smooth" });
+    timer = setInterval(function () {
+      if (current >= steps.length - 1) { stopPlay(); return; }
+      setStep(current + 1);
+    }, 2200);
+  });
+})();
+</script>
+</body>
+</html>

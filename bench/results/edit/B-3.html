@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly Engineering Status: Team Checkout, Week 41</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --ink: #1c2330;
+    --muted: #5f6b7a;
+    --line: #e3e6eb;
+    --accent: #3b5bdb;
+    --accent-soft: #e7ecfd;
+    --done: #2b8a3e;
+    --done-bg: #e6f4ea;
+    --prog: #b26a00;
+    --prog-bg: #fff4e0;
+    --block: #c92a2a;
+    --block-bg: #fdeaea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 40px 24px 64px; }
+  header { margin-bottom: 28px; }
+  .eyebrow {
+    font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+  h1 { margin: 6px 0 4px; font-size: 28px; line-height: 1.2; }
+  .sub { color: var(--muted); margin: 0; }
+  h2 {
+    font-size: 17px; margin: 0 0 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  h2::before {
+    content: ""; width: 4px; height: 18px; border-radius: 2px; background: var(--accent);
+  }
+  section {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 24px; margin-bottom: 20px;
+    box-shadow: 0 1px 2px rgba(16,24,40,.04);
+  }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .kpi {
+    border: 1px solid var(--line); border-radius: 10px; padding: 16px;
+    background: linear-gradient(180deg, #fff, #fafbfc);
+  }
+  .kpi .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .kpi .value { font-size: 30px; font-weight: 700; margin-top: 4px; line-height: 1.1; }
+  .kpi .value small { font-size: 15px; font-weight: 600; color: var(--muted); margin-left: 2px; }
+  .kpi .delta { font-size: 13px; margin-top: 6px; color: var(--muted); }
+  .kpi .delta.good { color: var(--done); font-weight: 600; }
+  .chart-wrap { width: 100%; overflow-x: auto; }
+  svg.chart { display: block; width: 100%; max-width: 640px; height: auto; margin: 0 auto; }
+  .bar { fill: var(--accent); transition: fill .15s; cursor: default; }
+  .bar:hover, .bar.peak:hover { fill: #2f49b0; }
+  .bar.peak { fill: #5c7cfa; }
+  .chart-note { text-align: center; color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .filters button {
+    font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 999px;
+    border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer;
+  }
+  .filters button:hover { border-color: var(--accent); }
+  .filters button[aria-pressed="true"] {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+  .filters .count { opacity: .7; margin-left: 4px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  thead th {
+    text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--muted); padding: 10px 12px; border-bottom: 2px solid var(--line);
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  thead th:hover { color: var(--ink); }
+  thead th .arrow { opacity: .5; font-size: 10px; margin-left: 4px; }
+  tbody td { padding: 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #fafbfd; }
+  .id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .owner {
+    display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 6px;
+    background: #f0f2f5; color: #3d4756;
+  }
+  .status {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+    padding: 3px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .status.done { color: var(--done); background: var(--done-bg); }
+  .status.progress { color: var(--prog); background: var(--prog-bg); }
+  .status.blocked { color: var(--block); background: var(--block-bg); }
+  .note { color: var(--muted); }
+  .risks { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+  .risks li {
+    display: flex; gap: 14px; padding: 14px 16px; border-radius: 10px;
+    border: 1px solid #f3d6d6; background: #fffafa;
+  }
+  .risks .num {
+    flex: none; width: 26px; height: 26px; border-radius: 50%;
+    background: var(--block); color: #fff; font-weight: 700; font-size: 13px;
+    display: grid; place-items: center;
+  }
+  .risks .ref { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .next { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .next li {
+    display: flex; gap: 12px; align-items: flex-start; padding: 12px 16px;
+    border-radius: 10px; background: var(--accent-soft);
+  }
+  .next .chk {
+    flex: none; width: 18px; height: 18px; margin-top: 2px; border-radius: 4px;
+    border: 2px solid var(--accent); background: #fff;
+  }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 24px; }
+  @media (max-width: 760px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .hide-sm { display: none; }
+  }
+  @media print {
+    body { background: #fff; }
+    section { box-shadow: none; break-inside: avoid; }
+    .filters { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Weekly engineering status</div>
+    <h1>Team Checkout &middot; Week 41</h1>
+    <p class="sub">Headline numbers, delivery, work items, risks and plan for next week.</p>
+  </header>
+
+  <section aria-labelledby="h-kpi">
+    <h2 id="h-kpi">Headline numbers</h2>
+    <div class="kpis">
+      <div class="kpi">
+        <div class="label">PRs merged</div>
+        <div class="value">23</div>
+        <div class="delta">Mon&ndash;Fri</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Incidents</div>
+        <div class="value">2</div>
+        <div class="delta">This week</div>
+      </div>
+      <div class="kpi">
+        <div class="label">p95 checkout latency</div>
+        <div class="value">412<small>ms</small></div>
+        <div class="delta good">&darr; 118 ms from 530 ms (&minus;22%)</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Test coverage</div>
+        <div class="value">78<small>%</small></div>
+        <div class="delta">Current</div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-chart">
+    <h2 id="h-chart">PRs merged per day</h2>
+    <div class="chart-wrap">
+      <svg class="chart" viewBox="0 0 560 270" role="img" aria-label="Bar chart of PRs merged per day: Monday 3, Tuesday 6, Wednesday 4, Thursday 7, Friday 3">
+        <g font-size="12" fill="#5f6b7a" text-anchor="end">
+          <line x1="50" y1="220" x2="540" y2="220" stroke="#c9ced6"/>
+          <line x1="50" y1="170" x2="540" y2="170" stroke="#eceff3"/>
+          <line x1="50" y1="120" x2="540" y2="120" stroke="#eceff3"/>
+          <line x1="50" y1="70"  x2="540" y2="70"  stroke="#eceff3"/>
+          <line x1="50" y1="20"  x2="540" y2="20"  stroke="#eceff3"/>
+          <text x="40" y="224">0</text>
+          <text x="40" y="174">2</text>
+          <text x="40" y="124">4</text>
+          <text x="40" y="74">6</text>
+          <text x="40" y="24">8</text>
+        </g>
+        <g>
+          <rect class="bar" x="71"  y="145" width="56" height="75"  rx="5"><title>Mon: 3 PRs</title></rect>
+          <rect class="bar" x="169" y="70"  width="56" height="150" rx="5"><title>Tue: 6 PRs</title></rect>
+          <rect class="bar" x="267" y="120" width="56" height="100" rx="5"><title>Wed: 4 PRs</title></rect>
+          <rect class="bar peak" x="365" y="45" width="56" height="175" rx="5"><title>Thu: 7 PRs (peak)</title></rect>
+          <rect class="bar" x="463" y="145" width="56" height="75"  rx="5"><title>Fri: 3 PRs</title></rect>
+        </g>
+        <g font-size="13" font-weight="700" fill="#1c2330" text-anchor="middle">
+          <text x="99"  y="138">3</text>
+          <text x="197" y="63">6</text>
+          <text x="295" y="113">4</text>
+          <text x="393" y="38">7</text>
+          <text x="491" y="138">3</text>
+        </g>
+        <g font-size="13" fill="#5f6b7a" text-anchor="middle">
+          <text x="99"  y="242">Mon</text>
+          <text x="197" y="242">Tue</text>
+          <text x="295" y="242">Wed</text>
+          <text x="393" y="242">Thu</text>
+          <text x="491" y="242">Fri</text>
+        </g>
+        <text x="14" y="120" font-size="12" fill="#5f6b7a" text-anchor="middle" transform="rotate(-90 14 120)">PRs merged</text>
+      </svg>
+    </div>
+    <div class="chart-note">Total 23 PRs &middot; peak Thursday (7)</div>
+  </section>
+
+  <section aria-labelledby="h-items">
+    <h2 id="h-items">Work items</h2>
+    <div class="filters" role="group" aria-label="Filter by status">
+      <button type="button" data-filter="all" aria-pressed="true">All<span class="count">6</span></button>
+      <button type="button" data-filter="done" aria-pressed="false">Done<span class="count">4</span></button>
+      <button type="button" data-filter="progress" aria-pressed="false">In progress<span class="count">1</span></button>
+      <button type="button" data-filter="blocked" aria-pressed="false">Blocked<span class="count">1</span></button>
+    </div>
+    <table id="items">
+      <thead>
+        <tr>
+          <th data-sort="0">ID<span class="arrow">&#9650;</span></th>
+          <th data-sort="1">Item<span class="arrow"></span></th>
+          <th data-sort="2">Owner<span class="arrow"></span></th>
+          <th data-sort="3">Status<span class="arrow"></span></th>
+          <th class="hide-sm">Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-status="done">
+          <td class="id">CHK-101</td>
+          <td>Apple Pay button</td>
+          <td><span class="owner">frontend</span></td>
+          <td><span class="status done">Done</span></td>
+          <td class="note hide-sm">Shipped behind flag</td>
+        </tr>
+        <tr data-status="done">
+          <td class="id">CHK-102</td>
+          <td>Address autocomplete</td>
+          <td><span class="owner">frontend</span></td>
+          <td><span class="status done">Done</span></td>
+          <td class="note hide-sm">Shipped Thursday</td>
+        </tr>
+        <tr data-status="done">
+          <td class="id">CHK-103</td>
+          <td>Retry queue for payment webhooks</td>
+          <td><span class="owner">backend</span></td>
+          <td><span class="status done">Done</span></td>
+          <td class="note hide-sm">Cut duplicate charges to zero in staging</td>
+        </tr>
+        <tr data-status="blocked">
+          <td class="id">CHK-104</td>
+          <td>Fraud score threshold tuning</td>
+          <td><span class="owner">data</span></td>
+          <td><span class="status blocked">Blocked</span></td>
+          <td class="note hide-sm">Needs legal sign-off</td>
+        </tr>
+        <tr data-status="done">
+          <td class="id">CHK-105</td>
+          <td>Cart service p95 latency</td>
+          <td><span class="owner">backend</span></td>
+          <td><span class="status done">Done</span></td>
+          <td class="note hide-sm">530 ms to 412 ms</td>
+        </tr>
+        <tr data-status="progress">
+          <td class="id">CHK-106</td>
+          <td>Guest checkout A/B test</td>
+          <td><span class="owner">product</span></td>
+          <td><span class="status progress">In progress</span></td>
+          <td class="note hide-sm">40% of traffic enrolled</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section aria-labelledby="h-risks">
+    <h2 id="h-risks">Risks</h2>
+    <ol class="risks">
+      <li>
+        <span class="num">1</span>
+        <div>
+          <div>Fraud tuning blocked on legal; could slip the November release.</div>
+          <div class="ref">Related: CHK-104</div>
+        </div>
+      </li>
+      <li>
+        <span class="num">2</span>
+        <div>
+          <div>Autocomplete API quota resets monthly; a spike would disable the feature.</div>
+          <div class="ref">Related: CHK-102</div>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="h-next">
+    <h2 id="h-next">Next week</h2>
+    <ul class="next">
+      <li><span class="chk" aria-hidden="true"></span><div>Get legal answer on fraud thresholds <span class="id">CHK-104</span></div></li>
+      <li><span class="chk" aria-hidden="true"></span><div>Read out A/B results <span class="id">CHK-106</span></div></li>
+    </ul>
+  </section>
+
+  <footer>Team Checkout &middot; Weekly engineering status &middot; Week 41</footer>
+</div>
+
+<script>
+(function () {
+  var table = document.getElementById('items');
+  var tbody = table.tBodies[0];
+  var buttons = document.querySelectorAll('.filters button');
+
+  buttons.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var f = btn.getAttribute('data-filter');
+      buttons.forEach(function (b) { b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'); });
+      Array.prototype.forEach.call(tbody.rows, function (row) {
+        row.style.display = (f === 'all' || row.getAttribute('data-status') === f) ? '' : 'none';
+      });
+    });
+  });
+
+  var statusOrder = { blocked: 0, progress: 1, done: 2 };
+  var current = { col: 0, dir: 1 };
+  var headers = table.querySelectorAll('th[data-sort]');
+
+  headers.forEach(function (th) {
+    th.addEventListener('click', function () {
+      var col = parseInt(th.getAttribute('data-sort'), 10);
+      current.dir = (current.col === col) ? -current.dir : 1;
+      current.col = col;
+      var rows = Array.prototype.slice.call(tbody.rows);
+      rows.sort(function (a, b) {
+        var av, bv;
+        if (col === 3) {
+          av = statusOrder[a.getAttribute('data-status')];
+          bv = statusOrder[b.getAttribute('data-status')];
+        } else {
+          av = a.cells[col].textContent.trim().toLowerCase();
+          bv = b.cells[col].textContent.trim().toLowerCase();
+        }
+        return av < bv ? -current.dir : av > bv ? current.dir : 0;
+      });
+      rows.forEach(function (r) { tbody.appendChild(r); });
+      headers.forEach(function (h) {
+        h.querySelector('.arrow').innerHTML = (h === th) ? (current.dir === 1 ? '&#9650;' : '&#9660;') : '';
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>

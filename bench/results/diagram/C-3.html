@@ -1,0 +1,48 @@
+<!doctype html><meta charset="utf-8"><script src="kit/kit.js" defer></script>
+<rk-header title="Checkout Platform: Architecture Overview" sub="Components, connections, and the path of one checkout"></rk-header>
+
+<h2>Components</h2>
+<rk-table>
+Component | Kind | Role
+Web app | Client | Browser client
+Mobile app | Client | Mobile client
+API gateway | Service | Entry point for both clients
+Checkout service | Service | Coordinates the checkout
+Cart service | Service | Loads carts
+Fraud service | Service | Returns a fraud score
+Payment service | Service | Charges the card
+Email service | Service | Sends the receipt
+Postgres | Database | Orders database
+Redis | Cache | Cart cache
+Kafka | Queue | Event bus
+Stripe | External | Payment provider
+</rk-table>
+
+<h2>Diagram</h2>
+<rk-diagram title="Checkout platform: every component and connection">
+Web app [user] -> API gateway [svc]: HTTPS
+Mobile app [user] -> API gateway [svc]: HTTPS
+API gateway [svc] -> Checkout service [svc]: gRPC
+Checkout service [svc] -> Cart service [svc]: gRPC, loads the cart
+Cart service [svc] -> Redis [cache]: reads and writes carts
+Checkout service [svc] -> Fraud service [svc]: asks for a fraud score
+Checkout service [svc] -> Payment service [svc]: charges the card
+Payment service [svc] -> Stripe [ext]: payment API call
+Checkout service [svc] -> Postgres [db]: writes the order
+Checkout service [svc] -> Kafka [queue]: publishes order.created
+Kafka [queue] -> Email service [svc]: consumes order.created
+</rk-diagram>
+
+<h2>One checkout, step by step</h2>
+<rk-steps>
+Client request | The Web app or Mobile app calls the **API gateway** over HTTPS.
+Route to checkout | The API gateway forwards the request to the **Checkout service** over gRPC.
+Load the cart | Checkout service calls the **Cart service** over gRPC; Cart service reads the cart from **Redis**.
+Fraud check | Checkout service asks the **Fraud service** for a fraud score.
+Charge the card | Checkout service asks the **Payment service** to charge the card; Payment service calls the **Stripe** payment API.
+Write the order | Only after the fraud score passes and the charge succeeds, Checkout service writes the order to **Postgres**.
+Publish the event | Checkout service publishes `order.created` to **Kafka**.
+Send the receipt | The **Email service** consumes `order.created` from Kafka and sends the receipt.
+</rk-steps>
+
+<rk-callout kind="note" title="Ordering rule">An order is only written to Postgres after the fraud score passes **and** the charge succeeds.</rk-callout>

@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly Engineering Status · Team Checkout · Week 41</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --ink: #1c2230;
+    --muted: #5f6b7a;
+    --line: #e3e7ed;
+    --accent: #3b5bdb;
+    --accent-soft: #e7ecff;
+    --done: #2b8a3e;
+    --done-bg: #e6f4ea;
+    --prog: #b26a00;
+    --prog-bg: #fff4e0;
+    --block: #c92a2a;
+    --block-bg: #fdeaea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 32px 24px 48px; }
+  header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    flex-wrap: wrap; gap: 12px;
+    border-bottom: 2px solid var(--line); padding-bottom: 18px; margin-bottom: 28px;
+  }
+  header h1 { margin: 0; font-size: 26px; letter-spacing: -0.01em; }
+  header .sub { color: var(--muted); margin-top: 4px; }
+  .badge {
+    background: var(--accent-soft); color: var(--accent);
+    font-weight: 600; font-size: 13px; padding: 6px 12px; border-radius: 999px;
+  }
+  h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 0 0 14px;
+  }
+  section { margin-bottom: 28px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 22px; box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+  }
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .kpi .label { color: var(--muted); font-size: 13px; }
+  .kpi .value { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; margin-top: 4px; }
+  .kpi .value small { font-size: 16px; font-weight: 600; color: var(--muted); margin-left: 2px; }
+  .kpi .delta { font-size: 13px; margin-top: 4px; color: var(--muted); }
+  .kpi .delta.good { color: var(--done); font-weight: 600; }
+  .grid2 { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+  .chart-wrap { position: relative; }
+  svg text { font-family: inherit; }
+  .bar { fill: var(--accent); transition: fill .15s; cursor: default; }
+  .bar:hover, .bar.active { fill: #2f4ac0; }
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0;
+    background: var(--ink); color: #fff; font-size: 12px; padding: 5px 9px;
+    border-radius: 6px; transform: translate(-50%, -110%); white-space: nowrap;
+    transition: opacity .12s;
+  }
+  .summary-list { list-style: none; margin: 0; padding: 0; }
+  .summary-list li {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid var(--line);
+  }
+  .summary-list li:last-child { border-bottom: 0; }
+  .progress { height: 10px; border-radius: 999px; background: var(--line); overflow: hidden; display: flex; margin: 6px 0 16px; }
+  .progress span { display: block; height: 100%; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .filters button {
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    font: inherit; font-size: 13px; padding: 6px 14px; border-radius: 999px; cursor: pointer;
+  }
+  .filters button:hover { border-color: #c5ccd6; }
+  .filters button.on { background: var(--ink); color: #fff; border-color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    background: #fafbfc; cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  th:hover { color: var(--ink); }
+  th .arrow { opacity: .4; font-size: 10px; margin-left: 4px; }
+  tbody tr:hover { background: #fafbfc; }
+  td.id { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  td.note { color: var(--muted); }
+  .pill {
+    display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px;
+    border-radius: 999px; white-space: nowrap;
+  }
+  .pill.done { background: var(--done-bg); color: var(--done); }
+  .pill.progress { background: var(--prog-bg); color: var(--prog); }
+  .pill.blocked { background: var(--block-bg); color: var(--block); }
+  .owner { text-transform: capitalize; }
+  .risks { list-style: none; margin: 0; padding: 0; counter-reset: r; }
+  .risks li {
+    counter-increment: r; position: relative; padding: 14px 16px 14px 52px;
+    border: 1px solid var(--line); border-left: 4px solid var(--block);
+    border-radius: 8px; margin-bottom: 10px; background: #fff;
+  }
+  .risks li::before {
+    content: counter(r); position: absolute; left: 14px; top: 13px;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--block-bg); color: var(--block);
+    font-weight: 700; font-size: 13px; display: grid; place-items: center;
+  }
+  .risks li.medium { border-left-color: var(--prog); }
+  .risks li.medium::before { background: var(--prog-bg); color: var(--prog); }
+  .risks .ref { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; color: var(--muted); }
+  .next { list-style: none; margin: 0; padding: 0; }
+  .next li { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .next li:last-child { border-bottom: 0; }
+  .next .chk {
+    flex: none; width: 18px; height: 18px; margin-top: 2px; border: 2px solid var(--accent);
+    border-radius: 5px;
+  }
+  .next .ref { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; color: var(--muted); margin-left: 6px; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 12px; }
+  @media (max-width: 820px) {
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .grid2 { grid-template-columns: 1fr; }
+  }
+  @media print {
+    body { background: #fff; }
+    .filters { display: none; }
+    .card, .kpi { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>Weekly Engineering Status</h1>
+      <div class="sub">Team Checkout</div>
+    </div>
+    <span class="badge">Week 41</span>
+  </header>
+
+  <section>
+    <h2>Headline numbers</h2>
+    <div class="kpis">
+      <div class="kpi">
+        <div class="label">PRs merged</div>
+        <div class="value">23</div>
+        <div class="delta">Mon–Fri</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Incidents</div>
+        <div class="value">2</div>
+        <div class="delta">This week</div>
+      </div>
+      <div class="kpi">
+        <div class="label">p95 checkout latency</div>
+        <div class="value">412<small>ms</small></div>
+        <div class="delta good">▼ 118 ms from 530 ms</div>
+      </div>
+      <div class="kpi">
+        <div class="label">Test coverage</div>
+        <div class="value">78<small>%</small></div>
+        <div class="delta">Current</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="grid2">
+    <div class="card">
+      <h2>PRs merged per day</h2>
+      <div class="chart-wrap" id="chartWrap">
+        <svg viewBox="0 0 520 220" width="100%" role="img" aria-label="Bar chart of PRs merged per day: Monday 3, Tuesday 6, Wednesday 4, Thursday 7, Friday 3">
+          <g stroke="#e3e7ed" stroke-width="1">
+            <line x1="50" y1="20"  x2="500" y2="20"/>
+            <line x1="50" y1="60"  x2="500" y2="60"/>
+            <line x1="50" y1="100" x2="500" y2="100"/>
+            <line x1="50" y1="140" x2="500" y2="140"/>
+          </g>
+          <line x1="50" y1="180" x2="500" y2="180" stroke="#c5ccd6" stroke-width="1.5"/>
+          <g fill="#5f6b7a" font-size="12" text-anchor="end">
+            <text x="40" y="184">0</text>
+            <text x="40" y="144">2</text>
+            <text x="40" y="104">4</text>
+            <text x="40" y="64">6</text>
+            <text x="40" y="24">8</text>
+          </g>
+          <g>
+            <rect class="bar" data-day="Monday"    data-v="3" x="71"  y="120" width="48" height="60"  rx="5"/>
+            <rect class="bar" data-day="Tuesday"   data-v="6" x="161" y="60"  width="48" height="120" rx="5"/>
+            <rect class="bar" data-day="Wednesday" data-v="4" x="251" y="100" width="48" height="80"  rx="5"/>
+            <rect class="bar" data-day="Thursday"  data-v="7" x="341" y="40"  width="48" height="140" rx="5"/>
+            <rect class="bar" data-day="Friday"    data-v="3" x="431" y="120" width="48" height="60"  rx="5"/>
+          </g>
+          <g fill="#1c2230" font-size="13" font-weight="700" text-anchor="middle">
+            <text x="95"  y="113">3</text>
+            <text x="185" y="53">6</text>
+            <text x="275" y="93">4</text>
+            <text x="365" y="33">7</text>
+            <text x="455" y="113">3</text>
+          </g>
+          <g fill="#5f6b7a" font-size="13" text-anchor="middle">
+            <text x="95"  y="202">Mon</text>
+            <text x="185" y="202">Tue</text>
+            <text x="275" y="202">Wed</text>
+            <text x="365" y="202">Thu</text>
+            <text x="455" y="202">Fri</text>
+          </g>
+        </svg>
+        <div class="tip" id="tip"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Work item summary</h2>
+      <div class="progress" aria-hidden="true">
+        <span style="width:66.667%;background:var(--done)"></span>
+        <span style="width:16.667%;background:#f0a020"></span>
+        <span style="width:16.667%;background:var(--block)"></span>
+      </div>
+      <ul class="summary-list">
+        <li><span class="pill done">Done</span><strong>4</strong></li>
+        <li><span class="pill progress">In progress</span><strong>1</strong></li>
+        <li><span class="pill blocked">Blocked</span><strong>1</strong></li>
+        <li><span>Total work items</span><strong>6</strong></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Work items</h2>
+    <div class="filters" id="filters">
+      <button class="on" data-f="all">All (6)</button>
+      <button data-f="done">Done (4)</button>
+      <button data-f="progress">In progress (1)</button>
+      <button data-f="blocked">Blocked (1)</button>
+    </div>
+    <table id="items">
+      <thead>
+        <tr>
+          <th data-k="0">ID<span class="arrow">↕</span></th>
+          <th data-k="1">Item<span class="arrow">↕</span></th>
+          <th data-k="2">Owner<span class="arrow">↕</span></th>
+          <th data-k="3">Status<span class="arrow">↕</span></th>
+          <th data-k="4">Note<span class="arrow">↕</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-s="done">
+          <td class="id">CHK-101</td><td>Apple Pay button</td><td class="owner">frontend</td>
+          <td data-o="1"><span class="pill done">Done</span></td><td class="note">Shipped behind flag</td>
+        </tr>
+        <tr data-s="done">
+          <td class="id">CHK-102</td><td>Address autocomplete</td><td class="owner">frontend</td>
+          <td data-o="1"><span class="pill done">Done</span></td><td class="note">Shipped Thursday</td>
+        </tr>
+        <tr data-s="done">
+          <td class="id">CHK-103</td><td>Retry queue for payment webhooks</td><td class="owner">backend</td>
+          <td data-o="1"><span class="pill done">Done</span></td><td class="note">Cut duplicate charges to zero in staging</td>
+        </tr>
+        <tr data-s="blocked">
+          <td class="id">CHK-104</td><td>Fraud score threshold tuning</td><td class="owner">data</td>
+          <td data-o="3"><span class="pill blocked">Blocked</span></td><td class="note">Needs legal sign-off</td>
+        </tr>
+        <tr data-s="done">
+          <td class="id">CHK-105</td><td>Cart service p95 latency</td><td class="owner">backend</td>
+          <td data-o="1"><span class="pill done">Done</span></td><td class="note">530 ms to 412 ms</td>
+        </tr>
+        <tr data-s="progress">
+          <td class="id">CHK-106</td><td>Guest checkout A/B test</td><td class="owner">product</td>
+          <td data-o="2"><span class="pill progress">In progress</span></td><td class="note">40% of traffic enrolled</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="grid2">
+    <div class="card">
+      <h2>Risks</h2>
+      <ol class="risks">
+        <li>Fraud tuning blocked on legal; could slip the November release. <span class="ref">CHK-104</span></li>
+        <li class="medium">Autocomplete API quota resets monthly; a spike would disable the feature. <span class="ref">CHK-102</span></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>Next week</h2>
+      <ul class="next">
+        <li><span class="chk"></span><span>Get legal answer on fraud thresholds<span class="ref">CHK-104</span></span></li>
+        <li><span class="chk"></span><span>Read out A/B results<span class="ref">CHK-106</span></span></li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>Team Checkout · Weekly engineering status · Week 41</footer>
+</div>
+
+<script>
+(function () {
+  // Chart tooltips
+  var wrap = document.getElementById('chartWrap');
+  var tip = document.getElementById('tip');
+  var svg = wrap.querySelector('svg');
+  wrap.querySelectorAll('.bar').forEach(function (bar) {
+    bar.addEventListener('mouseenter', function () {
+      var v = bar.getAttribute('data-v');
+      tip.textContent = bar.getAttribute('data-day') + ': ' + v + (v === '1' ? ' PR' : ' PRs') + ' merged';
+      var sb = svg.getBoundingClientRect(), bb = bar.getBoundingClientRect(), wb = wrap.getBoundingClientRect();
+      tip.style.left = (bb.left + bb.width / 2 - wb.left) + 'px';
+      tip.style.top = (bb.top - wb.top) + 'px';
+      tip.style.opacity = 1;
+    });
+    bar.addEventListener('mouseleave', function () { tip.style.opacity = 0; });
+  });
+
+  // Status filter
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#items tbody tr'));
+  var buttons = document.querySelectorAll('#filters button');
+  buttons.forEach(function (b) {
+    b.addEventListener('click', function () {
+      buttons.forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+      var f = b.getAttribute('data-f');
+      rows.forEach(function (r) {
+        r.style.display = (f === 'all' || r.getAttribute('data-s') === f) ? '' : 'none';
+      });
+    });
+  });
+
+  // Column sort
+  var tbody = document.querySelector('#items tbody');
+  var dir = {};
+  document.querySelectorAll('#items th').forEach(function (th) {
+    th.addEventListener('click', function () {
+      var k = +th.getAttribute('data-k');
+      dir[k] = !dir[k];
+      var sign = dir[k] ? 1 : -1;
+      rows.sort(function (a, b) {
+        var ca = a.cells[k], cb = b.cells[k];
+        var va = ca.getAttribute('data-o') || ca.textContent.trim().toLowerCase();
+        var vb = cb.getAttribute('data-o') || cb.textContent.trim().toLowerCase();
+        return va < vb ? -sign : va > vb ? sign : 0;
+      });
+      rows.forEach(function (r) { tbody.appendChild(r); });
+      document.querySelectorAll('#items th .arrow').forEach(function (a) { a.textContent = '↕'; a.style.opacity = .4; });
+      var arrow = th.querySelector('.arrow');
+      arrow.textContent = dir[k] ? '▲' : '▼';
+      arrow.style.opacity = 1;
+    });
+  });
+})();
+</script>
+</body>
+</html>

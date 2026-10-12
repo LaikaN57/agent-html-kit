@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8"><script src="kit/kit.js" defer></script>
+<rk-header title="Weekly engineering status — Checkout" sub="Team Checkout · Week 41"></rk-header>
+
+<rk-stats>
+23 | PRs merged | 
+2 | Incidents | 
+412 ms | p95 checkout latency | +was 530 ms
+78% | Test coverage | 
+</rk-stats>
+
+<h2>Delivery</h2>
+<rk-chart type="bar" title="PRs merged per day">
+Mon: 3
+Tue: 6
+Wed: 4
+Thu: 7
+Fri: 3
+</rk-chart>
+
+<h2>Work items</h2>
+<rk-table>
+ID | Item | Owner | Status | Note
+CHK-101 | Apple Pay button | frontend | [done] | shipped behind flag
+CHK-102 | Address autocomplete | frontend | [progress] | waiting on API quota
+CHK-103 | Retry queue for payment webhooks | backend | [done] | cut duplicate charges to zero in staging
+CHK-104 | Fraud score threshold tuning | data | [blocked] | needs legal sign-off
+CHK-105 | Cart service p95 latency | backend | [done] | 530 ms to 412 ms
+CHK-106 | Guest checkout A/B test | product | [progress] | 40% of traffic enrolled
+</rk-table>
+
+<h2>Risks</h2>
+<rk-callout kind="risk" title="Fraud tuning blocked on legal">CHK-104 is blocked on legal sign-off; this could slip the **November release**.</rk-callout>
+<rk-callout kind="warn" title="Autocomplete API quota">The autocomplete API quota resets monthly; a traffic spike would disable the feature (CHK-102).</rk-callout>
+
+<h2>Next week</h2>
+<ul>
+<li>Finish address autocomplete (CHK-102).</li>
+<li>Get a legal answer on fraud thresholds (CHK-104).</li>
+<li>Read out the guest checkout A/B results (CHK-106).</li>
+</ul>

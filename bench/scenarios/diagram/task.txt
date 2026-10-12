@@ -1,0 +1,1 @@
+Write an architecture overview for a new engineer. Include a diagram with every component and every connection (label each connection), then a short walkthrough of what happens during one checkout. Use only the data below, invent nothing.

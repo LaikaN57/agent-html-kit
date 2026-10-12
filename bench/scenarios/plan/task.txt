@@ -1,0 +1,1 @@
+Turn the requirements below into an implementation plan. Another engineer will implement it from your plan alone and will never see these requirements, so every rule, number, error message and edge case must be in the plan. Include a flow diagram of the calculation, the rules as tables, ordered implementation steps and worked examples. Do not write the implementation itself.

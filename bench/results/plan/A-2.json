@@ -1,0 +1,21 @@
+{
+  "model": "claude-opus-5-5",
+  "output_tokens": 9290,
+  "thinking_tokens": 2349,
+  "artifact_tokens": 6941,
+  "input_tokens": 2,
+  "cache_creation_tokens": 3028,
+  "cache_read_tokens": 535,
+  "total_input_tokens": 3565,
+  "cost_usd": 0.210139,
+  "duration_ms": 76501,
+  "duration_api_ms": 76469,
+  "wall_s": 77.6,
+  "num_turns": 1,
+  "claude_code_version": null,
+  "scenario": "plan",
+  "format": "A",
+  "run": 2,
+  "fenced": false,
+  "chars": 14904
+}
