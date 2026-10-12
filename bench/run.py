@@ -15,6 +15,9 @@ Commands
   python bench/run.py edit --runs 3           # an agent updates one status in each report
   python bench/run.py count                   # token size of artifacts, kit and contracts as input
   python bench/run.py summary
+
+Existing receipts in the results folder are skipped, so an interrupted run resumes. Set
+AHK_RESULTS=bench/results-mine to measure into a new folder instead of bench/results.
 """
 import argparse
 import json
@@ -31,7 +34,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SCEN = ROOT / "scenarios"
-RES = ROOT / "results"
+# Results folder. The committed measurements live in bench/results; run_all.sh writes a fresh run
+# elsewhere (AHK_RESULTS) so nothing is skipped as "cached" and the two never mix.
+RES = Path(os.environ.get("AHK_RESULTS") or ROOT / "results").resolve()
 CONTRACTS = ROOT / "contracts"
 WORK = Path(tempfile.gettempdir()) / "ahk-bench"
 MODEL = "claude-opus-5-5"

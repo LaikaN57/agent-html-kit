@@ -45,6 +45,7 @@ rk-header+rk-stats,rk-header+div{display:block}
 .rk-page p{margin:0 0 12px;color:var(--ink2)}
 .rk-page ul,.rk-page ol{margin:0 0 14px;padding-left:22px;color:var(--ink2)}
 .rk-page li{margin:4px 0}
+.rk-page li>ul,.rk-page li>ol{margin:4px 0 0}.rk-page li li{border-bottom:0!important;padding:2px 0!important}
 .rk-page li.rk-task{list-style:none;margin-left:-22px}
 .rk-page li.rk-task input{margin-right:8px;accent-color:var(--accent)}
 .rk-page a{color:var(--accent)}
@@ -95,6 +96,7 @@ rk-pill{display:contents}
 .rk-callout.ok{background:#f0fdf4;border-color:#bbf7d0}.rk-callout.ok .i{background:var(--green)}
 .rk-chart,.rk-diagram{padding:18px 20px;margin:0 0 16px}
 .rk-chart svg,.rk-diagram svg{display:block;width:100%;height:auto}
+.rk-scroll{overflow-x:auto}.rk-chart .rk-scroll>svg{min-width:600px}
 .rk-chart text,.rk-diagram text{font-family:var(--font)}
 .rk-steps{list-style:none;padding:0!important;margin:0 0 16px!important;display:grid;gap:10px;counter-reset:s}
 .rk-steps li{display:flex;gap:14px;padding:14px 18px;margin:0}
@@ -112,6 +114,9 @@ background:var(--soft);color:var(--accent);font-weight:750;font-size:14px}
 .rk-item{background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:8px;cursor:grab;box-shadow:0 1px 2px rgba(15,23,42,.05);font-size:13.5px}
 .rk-item .id{font:600 11.5px var(--mono);color:var(--accent)}
 .rk-item.drag{opacity:.4}
+.rk-item.pick{outline:2px solid var(--accent);outline-offset:1px}
+.rk-board .hint{font-size:12px;color:var(--muted);margin:-4px 0 10px}
+@media (max-width:700px){.rk-board .lanes{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .rk-btn{font:650 13px var(--font);color:#fff;background:var(--accent);border:0;border-radius:10px;padding:8px 14px;cursor:pointer}
 .rk-out{width:100%;min-height:120px;margin-top:10px;font:13px/1.5 var(--mono);border:1px solid var(--line);border-radius:10px;padding:10px;display:none}
 body.rk-plain{background:#fff;color:#1f2328;font:16px/1.6 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
@@ -135,28 +140,40 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
   const ICON = { risk: "!", warn: "!", note: "i", ok: "✓" };
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const pill = (k, label) => `<span class="rk-pill ${k}">${esc(label || PILLS[k] || k)}</span>`;
+  const pill = (k, label) => `<span class="rk-pill ${esc(k)}">${esc(label || PILLS[k] || k)}</span>`;
 
-  // Inline markdown subset: **bold**, *italic*, `code`, [text](url), [done]-style pills.
+  // Inline markdown subset: **bold**, *italic*, ~~strike~~, `code`, [text](url), ![alt](src), [done]-style pills.
+  // Code spans stay literal; only the text between them is formatted.
   function inline(s, pills = true) {
-    let out = esc(s);
-    out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
+    return String(s).split(/(`[^`]+`)/).map((part, i) => (i % 2 ? `<code>${esc(part.slice(1, -1))}</code>` : prose(part, pills))).join("");
+  }
+  function prose(s, pills) {
+    // Link and image tags are parked as placeholders, so bold/pill/ID rules never touch an href.
+    const keep = [];
+    const hold = (html) => `\u0000${keep.push(html) - 1}\u0000`;
+    let out = esc(s).replace(/\u0000/g, "");
+    out = out.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (m, alt, u) => (safeUrl(u) ? hold(`<img src="${u}" alt="${alt}">`) : alt));
+    out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, u) => (safeUrl(u) ? hold(`<a href="${u}">`) + t + hold("</a>") : t));
     out = out.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
     out = out.replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>");
-    out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
+    out = out.replace(/~~([^~]+)~~/g, "<s>$1</s>");
     if (pills) {
       out = out.replace(/\[(done|progress|blocked|todo|ok|warn|fail)\]/gi, (_, k) => pill(k.toLowerCase()));
       out = chipIds(out);
     }
-    return out;
+    return out.replace(/\u0000(\d+)\u0000/g, (_, k) => keep[k]);
   }
-  // Ticket-style IDs (CHK-104, ENG-12) become mono chips, outside of tags only.
-  const chipIds = (html) => html.replace(/(<[^>]+>)|\b([A-Z][A-Z0-9]{1,9}-\d+)\b/g, (m, tag, id) => tag || `<span class="rk-id">${id}</span>`);
+  // Links and images: http(s), mailto, anchors and relative paths only (no javascript: and friends).
+  const safeUrl = (u) => !/[\x00-\x1f]/.test(u) && (/^(https?:|mailto:|#|\/|\.)/i.test(u) || !/^[a-z][a-z0-9+.-]*:/i.test(u));
+  // Ticket-style IDs (CHK-104, ENG-12) become mono chips, outside of tags only. UTF-8, SHA-256 & co. are not tickets.
+  const NOT_ID = /^(UTF|SHA|ISO|GPT|RFC|CVE|ES|MP|AES|RSA|TLS|SSL|HTTP|IPV|PEP|COVID|ECMA|RTX|GTX|ANSI)-/;
+  const chipIds = (html) => html.replace(/(<[^>]+>)|\b([A-Z][A-Z0-9]{1,9}-\d+)\b/g, (m, tag, id) => tag || (NOT_ID.test(id) ? id : `<span class="rk-id">${id}</span>`));
 
   // Raw text of a component, whether written as text or inside <script type="text/plain">.
   function rawText(el) {
     const s = el.querySelector(':scope > script[type^="text/"]');
-    return (s ? s.textContent : el.textContent);
+    // md2html writes "<\/script" so a script tag inside the markdown cannot end the block early.
+    return (s ? s.textContent.replace(/<\\\/script/gi, "</script") : el.textContent);
   }
   const lines = (txt) => txt.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const cells = (l) => l.replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
@@ -215,7 +232,7 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
       const hot = pills && r.some((c) => /\[(blocked|fail)\]/i.test(c));
       return `<tr${hot ? ' class="rk-hot"' : ""}>${head.map((_, i) => `<td${idCol && i === 1 ? ' class="rk-strong"' : ""}>${inline(r[i] || "", pills)}</td>`).join("")}</tr>`;
     };
-    el.innerHTML = `<div class="rk-tablewrap rk-card" style="overflow:hidden">${sum}<table style="border:0;box-shadow:none;border-radius:0"><thead><tr>${head.map((h) => `<th>${inline(h, pills)}</th>`).join("")}</tr></thead><tbody>${
+    el.innerHTML = `<div class="rk-tablewrap rk-card">${sum}<table style="border:0;box-shadow:none;border-radius:0"><thead><tr>${head.map((h) => `<th>${inline(h, pills)}</th>`).join("")}</tr></thead><tbody>${
       rows.map(row).join("")}</tbody></table></div>`;
   }
 
@@ -223,13 +240,17 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
     kind = kind || el.getAttribute("kind") || "note";
     title = title ?? el.getAttribute("title");
     const body = bodyHtml ?? el.innerHTML.trim();
-    el.innerHTML = `<div class="rk-callout ${kind}"><span class="i">${ICON[kind] || "i"}</span><div class="b">${title ? `<b>${inline(title)}</b> ` : ""}${body}</div></div>`;
+    el.innerHTML = `<div class="rk-callout ${esc(kind)}"><span class="i">${ICON[kind] || "i"}</span><div class="b">${title ? `<b>${inline(title)}</b> ` : ""}${body}</div></div>`;
   }
 
+  // "Label: 1,234.5" or "Label | 1e3". dp = decimals as written, so a value is shown the way it was given.
   function parsePoints(ls) {
     return ls.map((l) => {
-      const m = l.match(/^(.*?)\s*[:|]\s*(-?[\d.,]+)\s*(\S*)$/);
-      return m ? { label: m[1], value: parseFloat(m[2].replace(/,/g, "")) } : null;
+      const m = l.match(/^(.*?)\s*[:|]\s*(-?(?:\d[\d,]*)?\.?\d+(?:e[+-]?\d+)?)\s*(\S*)$/i);
+      if (!m) return null;
+      const raw = m[2].replace(/,/g, ""), value = Number(raw);
+      const dp = /e/i.test(raw) ? null : (raw.split(".")[1] || "").length;
+      return Number.isFinite(value) ? { label: m[1], value, dp } : null;
     }).filter(Boolean);
   }
 
@@ -237,15 +258,20 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
     meta = meta || {};
     const type = (meta.type || el.getAttribute("type") || "bar").toLowerCase();
     const title = meta.title || el.getAttribute("title") || "";
-    const unit = meta.unit || el.getAttribute("unit") || "";
+    const unit = esc(meta.unit || el.getAttribute("unit") || "");
     let pts;
     const attr = el.getAttribute("data");
     if (!ls && attr) pts = parsePoints(attr.split(","));
     else pts = parsePoints(ls || lines(rawText(el)));
     if (!pts.length) return;
+    if (pts.some((p) => p.value < 0)) {
+      // Bars grow from zero; a negative value would be drawn wrong, so say so instead of guessing.
+      el.innerHTML = `<div class="rk-callout warn"><span class="i">!</span><div class="b"><b>Chart not drawn.</b> rk-chart supports values of 0 or more.</div></div>`;
+      return;
+    }
     const max = Math.max(...pts.map((p) => p.value), 0) || 1;
     const nice = niceMax(max);
-    const fmt = (v) => (Number.isInteger(v) ? v : v.toFixed(1)) + unit;
+    const fmt = (v, dp) => (dp == null ? num(v) : v.toFixed(dp)) + unit;
     let svg;
     if (type === "hbar") {
       const rowH = 34, labW = 170, W = 640, H = pts.length * rowH + 10;
@@ -253,14 +279,14 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
         const w = ((W - labW - 60) * p.value) / nice, y = i * rowH + 6;
         return `<text x="${labW - 10}" y="${y + 17}" text-anchor="end" font-size="13" fill="#334155">${esc(p.label)}</text>
 <rect x="${labW}" y="${y + 3}" width="${Math.max(w, 2)}" height="20" rx="5" fill="url(#rkg)"/>
-<text x="${labW + w + 8}" y="${y + 17}" font-size="13" font-weight="650" fill="#0f172a">${fmt(p.value)}</text>`;
+<text x="${labW + w + 8}" y="${y + 17}" font-size="13" font-weight="650" fill="#0f172a">${fmt(p.value, p.dp)}</text>`;
       }).join("")}${GRAD}</svg>`;
     } else {
       const W = 900, H = 300, L = 40, B = 34, T = 22, R = 64;
       const pw = W - L - R, ph = H - B - T;
       const grid = [0, 0.25, 0.5, 0.75, 1].map((f) => {
         const y = T + ph - f * ph;
-        return `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#e3e8ef"/><text x="${L - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#94a3b8">${fmt(+(nice * f).toFixed(2))}</text>`;
+        return `<line x1="${L}" x2="${W - R}" y1="${y}" y2="${y}" stroke="#e3e8ef"/><text x="${L - 8}" y="${y + 4}" text-anchor="end" font-size="11" fill="#94a3b8">${fmt(nice * f)}</text>`;
       }).join("");
       const step = pw / pts.length;
       const xy = pts.map((p, i) => [L + step * i + step / 2, T + ph - (p.value / nice) * ph]);
@@ -268,7 +294,7 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
       let marks;
       if (type === "line") {
         marks = `<polyline points="${xy.map((q) => q.join(",")).join(" ")}" fill="none" stroke="#4f46e5" stroke-width="3" stroke-linejoin="round"/>` +
-          xy.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="5" fill="#fff" stroke="#4f46e5" stroke-width="3"/><text x="${q[0]}" y="${q[1] - 12}" text-anchor="middle" font-size="12" font-weight="650" fill="#0f172a">${fmt(pts[i].value)}</text>`).join("");
+          xy.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="5" fill="#fff" stroke="#4f46e5" stroke-width="3"/><text x="${q[0]}" y="${q[1] - 12}" text-anchor="middle" font-size="12" font-weight="650" fill="#0f172a">${fmt(pts[i].value, pts[i].dp)}</text>`).join("");
       } else {
         // Peak bar and average line are derived here, so the agent never writes them.
         const bw = Math.min(64, step * 0.5);
@@ -277,21 +303,23 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
         const avg = pts.reduce((a, p) => a + p.value, 0) / pts.length;
         marks = xy.map((q, i) => {
           const top = pts[i].value === peak;
-          return `<rect x="${q[0] - bw / 2}" y="${q[1]}" width="${bw}" height="${T + ph - q[1]}" rx="7" fill="${top ? "url(#rkp)" : "url(#rkg)"}"/><text x="${q[0]}" y="${q[1] - 8}" text-anchor="middle" font-size="13" font-weight="700" fill="${top ? "#3730a3" : "#0f172a"}">${fmt(pts[i].value)}</text>`;
+          return `<rect x="${q[0] - bw / 2}" y="${Math.min(q[1], T + ph)}" width="${bw}" height="${Math.max(0, T + ph - q[1])}" rx="7" fill="${top ? "url(#rkp)" : "url(#rkg)"}"/><text x="${q[0]}" y="${q[1] - 8}" text-anchor="middle" font-size="13" font-weight="700" fill="${top ? "#3730a3" : "#0f172a"}">${fmt(pts[i].value, pts[i].dp)}</text>`;
         }).join("");
         if (showAvg) {
           const ay = T + ph - (avg / nice) * ph;
-          marks += `<line x1="${L}" x2="${W - R + 4}" y1="${ay}" y2="${ay}" stroke="#f59e0b" stroke-width="2" stroke-dasharray="7 6"/><text x="${W - R + 8}" y="${ay + 4}" font-size="12" font-weight="700" fill="#b45309">avg ${fmt(+avg.toFixed(1))}</text>`;
+          marks += `<line x1="${L}" x2="${W - R + 4}" y1="${ay}" y2="${ay}" stroke="#f59e0b" stroke-width="2" stroke-dasharray="7 6"/><text x="${W - R + 8}" y="${ay + 4}" font-size="12" font-weight="700" fill="#b45309">avg ${fmt(avg)}</text>`;
         }
       }
       svg = `<svg viewBox="0 0 ${W} ${H}">${GRAD}${grid}${marks}${labels}</svg>`;
     }
-    el.innerHTML = `<div class="rk-card rk-chart">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}${svg}</div>`;
+    el.innerHTML = `<div class="rk-card rk-chart">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}<div class="rk-scroll">${svg}</div></div>`;
   }
+  // Axis ticks and the average: three to four significant digits, no float noise (0.07500000001 -> 0.075).
+  const num = (v) => (Number.isInteger(v) ? String(v) : String(+v.toPrecision(Math.abs(v) >= 1 ? 4 : 3)));
   const GRAD = `<defs><linearGradient id="rkg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a5b4fc"/><stop offset="1" stop-color="#818cf8"/></linearGradient><linearGradient id="rkp" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#4338ca"/></linearGradient></defs>`;
   function niceMax(v) {
     const p = Math.pow(10, Math.floor(Math.log10(v)));
-    for (const m of [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p;
+    for (const m of [1, 1.2, 1.6, 2, 2.4, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p; // quarters stay round
     return 10 * p;
   }
 
@@ -463,10 +491,13 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
       y += NH + Math.max(42, 22 + slots * 26);
     });
     const leftW = left.length ? Math.max(...left.map(labW), 0) + 40 + left.length * 14 : 0;
-    const allNodes = layers.flat();
-    const minX = Math.min(...allNodes.map((n) => n.x));
-    allNodes.forEach((n) => (n.x += 16 + leftW - minX));
-    const maxRight = Math.max(...allNodes.map((n) => n.x + n.w));
+    const allNodes = layers.flat(), labs = gaps.flat();
+    // Shift nodes and their branch labels together; the bounds include the labels, so none is cut off.
+    const minX = Math.min(...allNodes.map((n) => n.x), ...labs.map((o) => o.cx - o.lw / 2));
+    const dx = 16 + leftW - minX;
+    allNodes.forEach((n) => (n.x += dx));
+    labs.forEach((o) => (o.cx += dx));
+    const maxRight = Math.max(...allNodes.map((n) => n.x + n.w), ...labs.map((o) => o.cx + o.lw / 2));
     const railLab = Math.max(0, ...rail.map(labW));
     const paths = [];
     gaps.forEach((g) => g.forEach((o) => {
@@ -501,7 +532,7 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
       return `${shape}<text x="${n.x + n.w / 2}" y="${n.y + NH / 2 + 5 + (n.kind === "db" ? 3 : 0)}" text-anchor="middle" font-size="13.5" font-weight="600" fill="#0f172a">${esc(n.name)}</text>`;
     });
     const defs = `<defs><marker id="rka" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker><marker id="rkb" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker></defs>`;
-    el.innerHTML = `<div class="rk-card rk-diagram">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}<svg viewBox="0 0 ${W} ${H}" style="max-width:${W}px;margin:0 auto">${defs}${paths.map((x) => x.p).join("")}${boxes.join("")}${paths.map((x) => x.l).join("")}</svg></div>`;
+    el.innerHTML = `<div class="rk-card rk-diagram">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}<div class="rk-scroll"><svg viewBox="0 0 ${W} ${H}" style="max-width:${W}px;min-width:${Math.min(W, 640)}px;margin:0 auto">${defs}${paths.map((x) => x.p).join("")}${boxes.join("")}${paths.map((x) => x.l).join("")}</svg></div></div>`;
   }
 
   function steps(el, ls) {
@@ -523,19 +554,29 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
     items.forEach((i) => { if (!lanes.includes(i.col)) i.col = lanes[0]; });
     const title = meta.title || el.getAttribute("title") || "";
     el.innerHTML = `<div class="rk-board"><div class="bar"><div class="rk-ctitle" style="margin:0">${inline(title)}</div><button class="rk-btn">Export as markdown</button></div>
+<div class="hint">Drag a card, or tap a card and then a column. Keyboard: focus a card and press 1-${lanes.length}.</div>
 ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>Inbox</span><span class="c"></span></div></div>` : ""}<div class="lanes" style="--n:${cols.length}">${cols.map((c) => `<div class="rk-lane" data-col="${esc(c)}"><div class="lh"><span>${esc(c)}</span><span class="c"></span></div></div>`).join("")}</div>
 <textarea class="rk-out" readonly></textarea></div>`;
     const laneEl = (c) => el.querySelector(`.rk-lane[data-col="${CSS.escape(c)}"]`);
-    let dragging = null;
+    let dragging = null, picked = null;
+    const pick = (d) => { picked?.classList.remove("pick"); picked = picked === d ? null : d; picked?.classList.add("pick"); };
     items.forEach((it) => {
       const d = document.createElement("div");
-      d.className = "rk-item"; d.draggable = true; d.dataset.id = it.id;
+      d.className = "rk-item"; d.draggable = true; d.tabIndex = 0; d.dataset.id = it.id;
       d.innerHTML = `<div class="id">${esc(it.id)}</div>${inline(it.title)}`;
       d.addEventListener("dragstart", () => { dragging = d; d.classList.add("drag"); });
       d.addEventListener("dragend", () => { d.classList.remove("drag"); dragging = null; count(); });
+      // Touch screens have no HTML drag and drop: tap a card, then tap the column it goes to.
+      d.addEventListener("click", (e) => { e.stopPropagation(); pick(d); });
+      // Keyboard: number keys move the focused card to that column (1 = first column on screen).
+      d.addEventListener("keydown", (e) => {
+        const all = [...el.querySelectorAll(".rk-lane")], n = Number(e.key);
+        if (n >= 1 && n <= all.length) { all[n - 1].appendChild(d); d.focus(); count(); }
+      });
       laneEl(it.col).appendChild(d);
     });
     el.querySelectorAll(".rk-lane").forEach((lane) => {
+      lane.addEventListener("click", () => { if (picked) { lane.appendChild(picked); pick(picked); count(); } });
       lane.addEventListener("dragover", (e) => { e.preventDefault(); lane.classList.add("over"); });
       lane.addEventListener("dragleave", () => lane.classList.remove("over"));
       lane.addEventListener("drop", (e) => {
@@ -567,6 +608,26 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
   };
   function mk(fn, ls, meta) { const d = document.createElement("div"); fn(d, ls, meta); return d; }
 
+  // A list and the lists nested under its items (deeper indent = child of the previous item).
+  const LI = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/;
+  function list(L, i, plain) {
+    const base = L[i].match(LI)[1].length, ordered = /^\d/.test(L[i].match(LI)[2]), items = [];
+    while (i < L.length) {
+      const m = L[i].match(LI);
+      if (!m || m[1].length < base) break;
+      if (m[1].length > base && items.length) {
+        const sub = list(L, i, plain);
+        items[items.length - 1] = items[items.length - 1].replace(/<\/li>$/, sub.html + "</li>");
+        i = sub.i; continue;
+      }
+      let t = m[3]; i++;
+      while (i < L.length && /^\s{2,}\S/.test(L[i]) && !LI.test(L[i])) t += " " + L[i++].trim();
+      const task = t.match(/^\[([ xX])\]\s+(.*)$/);
+      items.push(task ? `<li class="rk-task"><input type="checkbox" ${task[1] !== " " ? "checked" : ""}>${inline(task[2], !plain)}</li>` : `<li>${inline(t, !plain)}</li>`);
+    }
+    return { html: `<${ordered ? "ol" : "ul"}>${items.join("")}</${ordered ? "ol" : "ul"}>`, i };
+  }
+
   function renderMarkdown(src, plain) {
     const root = document.createElement("div");
     const L = src.replace(/\r/g, "").split("\n");
@@ -588,7 +649,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
         else add(`<pre><code${lang ? ` class="language-${lang}"` : ""}>${esc(body.join("\n"))}</code></pre>`);
         continue;
       }
-      if ((m = line.match(/^(#{1,4})\s+(.*)$/))) {
+      if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
         flush();
         if (!plain && m[1].length === 1 && !root.querySelector("rk-header")) {
           const h = document.createElement("rk-header"); h.setAttribute("title", m[2]); header(h); root.appendChild(h);
@@ -625,16 +686,10 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
         } else add(`<blockquote>${inline(text, !plain)}</blockquote>`);
         continue;
       }
-      if (/^\s*([-*+]|\d+[.)])\s+/.test(line)) {
+      if (LI.test(line)) {
         flush();
-        const ordered = /^\s*\d/.test(line), items = [];
-        while (i < L.length && /^\s*([-*+]|\d+[.)])\s+/.test(L[i])) {
-          let t = L[i++].replace(/^\s*([-*+]|\d+[.)])\s+/, "");
-          while (i < L.length && /^\s{2,}\S/.test(L[i]) && !/^\s*([-*+]|\d+[.)])\s+/.test(L[i])) t += " " + L[i++].trim();
-          const task = t.match(/^\[([ xX])\]\s+(.*)$/);
-          items.push(task ? `<li class="rk-task"><input type="checkbox" ${task[1] !== " " ? "checked" : ""}>${inline(task[2], !plain)}</li>` : `<li>${inline(t, !plain)}</li>`);
-        }
-        add(`<${ordered ? "ol" : "ul"}>${items.join("")}</${ordered ? "ol" : "ul"}>`);
+        const r = list(L, i, plain);
+        add(r.html); i = r.i;
         continue;
       }
       if (!line.trim()) { flush(); i++; continue; }
@@ -642,6 +697,24 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     }
     flush();
     return root;
+  }
+
+  // Plain HTML the agent wrote (<p>, <li>, callout text...): same inline formatting as the components,
+  // so **bold**, `code`, [done] and CHK-1 work in any text. Component data and code are left alone.
+  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-pill";
+  function formatText(root) {
+    const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const todo = [];
+    for (let n; (n = walk.nextNode());) {
+      if (/[*`~[]|[A-Z]-\d/.test(n.data) && !n.parentElement.closest(SKIP)) todo.push(n);
+    }
+    todo.forEach((n) => {
+      const html = inline(n.data);
+      if (html === esc(n.data)) return;
+      const t = document.createElement("template");
+      t.innerHTML = html;
+      n.replaceWith(t.content);
+    });
   }
 
   /* ---------- boot ---------- */
@@ -665,10 +738,10 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
       const plain = md.hasAttribute("plain");
       if (plain) body.classList.add("rk-plain");
       md.replaceWith(...renderMarkdown(rawText(md), plain).childNodes);
-    }
+    } else formatText(page);
     if (!document.title) {
       const h = page.querySelector("rk-header[title], h1");
-      if (h) document.title = h.getAttribute("title") || h.textContent;
+      if (h) document.title = (h.getAttribute("title") || h.textContent).replace(/[`*~]/g, "");
     }
     const run = (sel, fn) => page.querySelectorAll(sel).forEach((el) => fn(el));
     run("rk-cols", (el) => [...el.children].forEach((c) => c.classList.add("rk-col")));

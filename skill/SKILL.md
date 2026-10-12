@@ -6,8 +6,9 @@ description: Write HTML documents (reports, architecture diagrams, plans, triage
 # agent-html-kit
 
 The kit (`kit/kit.js`) holds all the design. You only write content, so an HTML file
-costs about as many tokens as markdown. Copy the `kit/` folder next to the documents
-once; every document loads it with one line.
+costs about as many tokens as markdown. If the folder you write into has no `kit/kit.js`,
+copy the `kit/` folder from this skill's directory next to the documents first; every
+document loads it with one line.
 
 ## Writing an HTML document
 
@@ -22,7 +23,7 @@ status pills [done] [progress] [blocked] [todo] [warn], and IDs like ABC-123 are
 <rk-stats>                                              one stat per line: value | label | note
 23 | PRs merged | +5 vs last week                       (note starting + is green, ! is red)
 </rk-stats>
-<rk-chart type="bar|line|hbar" title="..." unit="ms">   one point per line: Label: number
+<rk-chart type="bar|line|hbar" title="..." unit="ms">   one point per line: Label: number (0 or more)
 Mon: 3
 </rk-chart>
 <rk-table>                                              first line is the header, cells split by |

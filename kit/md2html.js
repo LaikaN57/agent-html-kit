@@ -17,7 +17,8 @@ const kit = path.join(__dirname, "kit.js");
 for (const file of files) {
   const src = fs.readFileSync(file, "utf8");
   const out = file.replace(/\.(md|markdown)$/i, "") + ".html";
-  const rel = path.relative(path.dirname(path.resolve(out)), kit).split(path.sep).join("/");
+  // A URL, not a file path: encode each segment so "#", "?" or spaces in folder names still load.
+  const rel = path.relative(path.dirname(path.resolve(out)), kit).split(path.sep).map(encodeURIComponent).join("/");
   const safe = src.replace(/<\/script/gi, "<\\/script");
   const html = `<!doctype html><meta charset="utf-8"><script src="${rel}" defer></script>\n<rk-md${plain ? " plain" : ""}><script type="text/markdown">\n${safe}\n</script></rk-md>\n`;
   fs.writeFileSync(out, html);

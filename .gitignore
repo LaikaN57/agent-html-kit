@@ -4,3 +4,4 @@ bench/results/_v1-bad-accounting/
 bench/*.log
 node_modules/
 __pycache__/
+bench/results-*/
