@@ -2,6 +2,11 @@
 
 HTML pages from a coding agent at markdown token cost.
 
+**Video:** this repo comes from [a YouTube video that walks through the benchmark](https://youtu.be/iLDkDIgqQM4):
+the four formats, where the tokens go, and what the kit changes.
+
+<a href="https://youtu.be/iLDkDIgqQM4"><img src="https://img.youtube.com/vi/iLDkDIgqQM4/maxresdefault.jpg" alt="Watch the video: I Tested HTML vs Markdown for AI Coding Agents!" width="480"></a>
+
 > [!NOTE]
 > **A demo, not a product.** This repo shows the approach behind the benchmark: move the
 > design into one file, and let the agent write only content. It is here to learn from and
@@ -22,11 +27,6 @@ every number taken from `claude -p --output-format json` usage receipts.
 Background: Thariq from the Claude Code team makes the case for HTML over markdown as agent
 output in [Using Claude Code: The Unreasonable Effectiveness of HTML](https://claude.com/blog/using-claude-code-the-unreasonable-effectiveness-of-html).
 This repo measures what that costs in tokens, and how to keep the HTML without paying for it.
-
-Video: this repo comes from [a YouTube video that walks through the benchmark](https://youtu.be/iLDkDIgqQM4):
-the four formats, where the tokens go, and what the kit changes.
-
-<a href="https://youtu.be/iLDkDIgqQM4"><img src="https://img.youtube.com/vi/iLDkDIgqQM4/maxresdefault.jpg" alt="Watch the video: HTML vs markdown in Claude Code, the token cost measured" width="480"></a>
 
 ## Results
 
