@@ -23,6 +23,11 @@ Background: Thariq from the Claude Code team makes the case for HTML over markdo
 output in [Using Claude Code: The Unreasonable Effectiveness of HTML](https://claude.com/blog/using-claude-code-the-unreasonable-effectiveness-of-html).
 This repo measures what that costs in tokens, and how to keep the HTML without paying for it.
 
+Video: this repo comes from [a YouTube video that walks through the benchmark](https://youtu.be/iLDkDIgqQM4):
+the four formats, where the tokens go, and what the kit changes.
+
+<a href="https://youtu.be/iLDkDIgqQM4"><img src="https://img.youtube.com/vi/iLDkDIgqQM4/maxresdefault.jpg" alt="Watch the video: HTML vs markdown in Claude Code, the token cost measured" width="480"></a>
+
 ## Results
 
 Model `claude-opus-5-5` in Claude Code 2.1.296, 3 runs per cell, median shown. Run on
