@@ -15,7 +15,7 @@ document loads it with one line.
 Start the file with exactly this line, then write only content:
 <!doctype html><meta charset="utf-8"><script src="kit/kit.js" defer></script>
 
-Never write <style>, other <script> tags, style attributes, CSS or SVG. The kit draws everything.
+Never write <style>, other <script> tags (except rk-diff's text/plain wrapper), style attributes, CSS or SVG. The kit draws everything.
 Plain <h2> <h3> <p> <ul> <ol> <li> <b> <code> <a> are styled. In any text: **bold**, `code`,
 status pills [done] [progress] [blocked] [todo] [warn], and IDs like ABC-123 are formatted.
 
