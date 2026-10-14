@@ -112,6 +112,22 @@ background:var(--soft);color:var(--accent);font-weight:750;font-size:14px}
 .rk-prog .bar span{display:block;height:100%;border-radius:99px;background:var(--c)}
 .rk-prog .good{--c:#10b981;--c2:var(--green)}.rk-prog .mid{--c:#f59e0b;--c2:var(--amber)}.rk-prog .bad{--c:#ef4444;--c2:var(--red)}
 .rk-prog .all{border-top:1px solid var(--line);margin-top:6px;padding-top:14px}.rk-prog .all .lab{font-weight:650;color:var(--ink)}
+.rk-tlwrap{margin:0 0 16px}
+.rk-tl{list-style:none;padding:0!important;margin:0!important}
+.rk-tl li{position:relative;display:grid;grid-template-columns:var(--dw) 14px minmax(0,1fr);gap:0 14px;padding:0 0 10px;margin:0}
+.rk-tl li::before{content:"";position:absolute;left:calc(var(--dw) + 20px);top:0;bottom:0;width:2px;background:var(--line)}
+.rk-tl li:first-child::before{top:22px}.rk-tl li:last-child::before{bottom:auto;height:22px}.rk-tl li:only-child::before{display:none}
+.rk-tl .d{padding-top:12px;text-align:right;font-weight:650;font-size:13.5px;color:var(--ink2);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.rk-tl .k{position:relative;width:14px;height:14px;margin-top:16px;border-radius:50%;background:var(--dc,var(--accent));box-shadow:0 0 0 4px var(--bg)}
+.rk-tl .c{padding:11px 16px;overflow-wrap:anywhere}
+.rk-tl .t{font-weight:650;color:var(--ink)}.rk-tl .sd{color:var(--ink2);font-size:14px}
+.rk-tl li.now .d{color:var(--accent);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding-top:6px}
+.rk-tl li.now .k{width:10px;height:10px;margin:8px 2px 0;background:var(--card);border:2px solid var(--accent)}
+.rk-tl li.now .c{padding:0;margin-top:13px;border-top:2px dashed var(--accent);height:0}
+@media (max-width:560px){.rk-tl li{grid-template-columns:14px minmax(0,1fr);grid-template-areas:"k d" "k c"}
+.rk-tl li::before{left:6px}.rk-tl .k{grid-area:k}.rk-tl .d{grid-area:d;text-align:left;padding:10px 0 4px}.rk-tl .c{grid-area:c}
+.rk-tl li.now .d{padding:4px 0 0}.rk-tl li.now .c{margin:4px 0 6px}.rk-tl li.now .k{margin-top:8px}}
+body.rk-plain .rk-tl .k{box-shadow:0 0 0 4px #fff}
 .rk-board{margin:0 0 16px}
 .rk-board .bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .rk-board .lanes{display:grid;gap:12px;grid-template-columns:repeat(var(--n),minmax(0,1fr))}
@@ -642,6 +658,45 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
     el.innerHTML = `<div class="rk-card rk-prog">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}${html}</div>`;
   }
 
+  // Timeline: "date | title | detail" milestones. Dates are YYYY-MM-DD, YYYY-MM or HH:MM; when every
+  // line uses the same one they are sorted, otherwise the writer's order and text are kept.
+  const DATES = [
+    ["day", /^(\d{4})-(\d{2})-(\d{2})$/, (y, m, d) => { const t = new Date(Date.UTC(y, m - 1, d)); return t.getUTCMonth() === m - 1 && t.getUTCDate() === +d ? y * 1e4 + m * 100 + +d : null; }],
+    ["month", /^(\d{4})-(\d{2})$/, (y, m) => (m >= 1 && m <= 12 ? y * 100 + +m : null)],
+    ["time", /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/, (h, m, s = 0) => (h < 24 && m < 60 && s < 60 ? h * 3600 + m * 60 + +s : null)],
+  ];
+  const DOT = { done: "--green", ok: "--green", progress: "--blue", blocked: "--red", fail: "--red", warn: "--amber", todo: "--gray" };
+  function timeline(el, ls, meta) {
+    meta = meta || {};
+    const title = meta.title || el.getAttribute("title") || "";
+    const items = (ls || lines(rawText(el))).map((l) => {
+      const c = cells(l);
+      // A line without "|" is a title with no date, which turns sorting off for the whole timeline.
+      const [date, t, ...rest] = c.length > 1 ? c : ["", c[0]];
+      const s = (l.match(/\[(done|progress|blocked|todo|ok|warn|fail)\]/i) || [])[1];
+      return { date, title: t || "", detail: rest.join(" | "), dot: s && DOT[s.toLowerCase()] };
+    });
+    if (!items.length) return;
+    let kind = null;
+    for (const [k, re, key] of DATES) {
+      const keys = items.map((i) => { const m = i.date.match(re); return m ? key(...m.slice(1).filter((x) => x !== undefined).map(Number)) : null; });
+      if (keys.every((x) => x !== null)) { items.forEach((i, n) => (i.key = keys[n])); kind = k; break; }
+    }
+    if (kind) items.sort((a, b) => a.key - b.key);
+    // "Today" goes before the first future item, only when there are items on both sides of it.
+    let now = -1;
+    if (kind === "day") {
+      const d = new Date(), today = d.getFullYear() * 1e4 + (d.getMonth() + 1) * 100 + d.getDate();
+      if (items[0].key <= today) now = items.findIndex((i) => i.key > today);
+    }
+    const li = (i) => `<li><div class="d">${esc(i.date)}</div><span class="k"${i.dot ? ` style="--dc:var(${i.dot})"` : ""}></span><div class="rk-card c"><div class="t">${inline(i.title)}</div>${
+      i.detail ? `<div class="sd">${inline(i.detail)}</div>` : ""}</div></li>`;
+    const rows = items.map(li);
+    if (now > 0) rows.splice(now, 0, `<li class="now"><div class="d">Today</div><span class="k"></span><div class="c"></div></li>`);
+    const dw = { time: 64, month: 76, day: 100 }[kind] || 120;
+    el.innerHTML = `<div class="rk-tlwrap">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}<ol class="rk-tl" style="--dw:${dw}px">${rows.join("")}</ol></div>`;
+  }
+
   // Board: "ID | title | column" items, drag between columns, export as markdown.
   function board(el, ls, meta) {
     meta = meta || {};
@@ -737,6 +792,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     matrix: (ls) => { const m = splitMeta(ls, ["title", "x", "y", "quadrants"]); return mk(matrix, ls, m); },
     stats: (ls) => mk(stats, ls),
     steps: (ls) => mk(steps, ls),
+    timeline: (ls) => { const m = splitMeta(ls, ["title"]); return mk(timeline, ls, m); },
   };
   function mk(fn, ls, meta) { const d = document.createElement("div"); fn(d, ls, meta); return d; }
 
@@ -833,7 +889,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
 
   // Plain HTML the agent wrote (<p>, <li>, callout text...): same inline formatting as the components,
   // so **bold**, `code`, [done] and CHK-1 work in any text. Component data and code are left alone.
-  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-progress,rk-matrix,rk-pill";
+  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-progress,rk-matrix,rk-timeline,rk-pill";
   function formatText(root) {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const todo = [];
@@ -885,6 +941,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     run("rk-diagram", (el) => diagram(el));
     run("rk-steps", (el) => steps(el));
     run("rk-progress", (el) => progress(el));
+    run("rk-timeline", (el) => timeline(el));
     run("rk-board", (el) => board(el));
     run("rk-compare", (el) => compare(el));
     run("rk-matrix", (el) => matrix(el));

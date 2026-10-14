@@ -43,6 +43,9 @@ Parse input | reject bad rows
 <rk-progress title="..." good="80" bad="50">            one goal per line: Label | value | target (default 100)
 Repos migrated | 34 | 50                                (kit computes %, colors and an overall row)
 </rk-progress>
+<rk-timeline title="...">                               dated milestones, one per line: date | title | detail
+2026-10-01 | Cutover | [done]                           (YYYY-MM-DD, YYYY-MM or 14:05; sorted, dot = first pill)
+</rk-timeline>
 <rk-board title="..." columns="Now,Next,Later,Cut">     drag-and-drop board with markdown export
 ID | title | column (optional, items start in Inbox)
 </rk-board>
@@ -70,6 +73,8 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
            (e.g. "p95 latency | 420ms | 310ms"; add "| lower" or "| higher" to flip one row)
   steps    numbered steps, one per line "Title | detail"
   progress optional "title: ...", "good: 80", "bad: 50", then "Label | value | target" lines (target defaults to 100)
+  timeline optional "title: ...", then "date | title | detail" lines; dates YYYY-MM-DD, YYYY-MM
+           or 14:05 are sorted, a pill like [done] colors the dot
   board    "title: ...", "columns: Now,Next,Later,Cut", then "ID | title | column" lines;
            renders a drag-and-drop board with markdown export (items without a column start in Inbox)
   matrix   optional "title:", "y: Impact", "x: Effort", "quadrants: A,B,C,D", then "ID | title | y-level | x-level"
