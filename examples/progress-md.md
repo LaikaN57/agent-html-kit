@@ -1,0 +1,22 @@
+# Q4 platform goals
+
+## Migrations
+
+```progress
+title: Repos on the new CI runner
+Payments | 34 | 50
+Growth | 18 | 20
+Search | 9 | 30
+Data platform | 12 | 10
+```
+
+## Quality and spend
+
+```progress
+title: Stricter bar: green at 90%, red under 60%
+good: 90
+bad: 60
+Test coverage | 82
+Infra budget used | $41,200 | $60,000
+Runbooks reviewed | 7 | 12
+```
