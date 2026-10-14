@@ -1,0 +1,24 @@
+<!doctype html><meta charset="utf-8"><script src="../kit/kit.js" defer></script>
+<rk-md><script type="text/markdown">
+# Checkout: One Payment, Call by Call
+
+The order of calls behind `POST /pay`, from the client to Stripe and back.
+
+```sequence
+title: Card payment, happy path
+Client [user] -> API: POST /pay
+API -> Fraud service: score(order)
+Fraud service --> API: score 12, pass
+API -> Payments: charge(card, 42.00 USD)
+Payments -> Stripe [ext]: create PaymentIntent
+Stripe --> Payments: succeeded
+Payments -> Payments: store idempotency key
+note: The order is only written after the charge succeeds
+API -> Postgres [db]: INSERT order
+API -> Kafka [queue]: publish order.created
+API --> Client: 201 Created
+```
+
+> Note: A retried `POST /pay` reuses the idempotency key, so Stripe never charges twice.
+
+</script></rk-md>

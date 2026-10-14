@@ -37,6 +37,9 @@ p95 latency | 420ms | 310ms                             (kit computes the change
 <rk-diagram title="...">                                one edge per line: A -> B: label
 Browser [user] -> API: HTTPS                            node kinds: [user] [svc] [db] [queue] [cache] [ext]
 </rk-diagram>
+<rk-sequence title="...">                               call order, one message per line: A -> B: call
+Client [user] -> API: POST /pay                         B --> A: reply (dashed), A -> A: self call, note: text (band)
+</rk-sequence>
 <rk-steps>                                              numbered steps, one per line: Title | detail
 Parse input | reject bad rows
 </rk-steps>
@@ -80,6 +83,8 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
            node kinds [user] [svc] [db] [queue] [cache] [ext], e.g. "Browser [user] -> API: HTTPS"
   compare  optional "title: ...", "lower: yes", then "Label | before | after" lines
            (e.g. "p95 latency | 420ms | 310ms"; add "| lower" or "| higher" to flip one row)
+  sequence optional "title: ...", then one message per line: "A -> B: call", "B --> A: reply",
+           "A -> A: self call", "note: text"; same node kinds as diagram
   steps    numbered steps, one per line "Title | detail"
   progress optional "title: ...", "good: 80", "bad: 50", then "Label | value | target" lines (target defaults to 100)
   timeline optional "title: ...", then "date | title | detail" lines; dates YYYY-MM-DD, YYYY-MM

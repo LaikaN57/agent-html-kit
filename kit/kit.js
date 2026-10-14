@@ -94,10 +94,10 @@ rk-pill{display:contents}
 .rk-callout.warn{background:#fffbeb;border-color:#fde68a}.rk-callout.warn .i{background:var(--amber)}
 .rk-callout.note{background:#f5f7ff;border-color:#c7d2fe}.rk-callout.note .i{background:var(--accent)}
 .rk-callout.ok{background:#f0fdf4;border-color:#bbf7d0}.rk-callout.ok .i{background:var(--green)}
-.rk-chart,.rk-diagram{padding:18px 20px;margin:0 0 16px}
-.rk-chart svg,.rk-diagram svg{display:block;width:100%;height:auto}
+.rk-chart,.rk-diagram,.rk-sequence{padding:18px 20px;margin:0 0 16px}
+.rk-chart svg,.rk-diagram svg,.rk-sequence svg{display:block;width:100%;height:auto}
 .rk-scroll{overflow-x:auto}.rk-chart .rk-scroll>svg{min-width:600px}
-.rk-chart text,.rk-diagram text{font-family:var(--font)}
+.rk-chart text,.rk-diagram text,.rk-sequence text{font-family:var(--font)}
 .rk-steps{list-style:none;padding:0!important;margin:0 0 16px!important;display:grid;gap:10px;counter-reset:s}
 .rk-steps li{display:flex;gap:14px;padding:14px 18px;margin:0}
 .rk-steps li::before{counter-increment:s;content:counter(s);flex:none;width:28px;height:28px;border-radius:9px;display:grid;place-items:center;
@@ -608,16 +608,90 @@ body.rk-plain .rk-tabbar{display:none}body.rk-plain rk-tabs>section[hidden]{disp
     return { W, H: y - 30, paths };
   }
 
+  // One node box in its KIND colors (db is a cylinder); shared by rk-diagram and rk-sequence.
+  function nodeBox(n, NH) {
+    const [fill, stroke] = KIND[n.kind] || KIND.svc;
+    const shape = n.kind === "db"
+      ? `<path d="M${n.x},${n.y + 8} a${n.w / 2},8 0 0,0 ${n.w},0 v${NH - 16} a${n.w / 2},8 0 0,1 ${-n.w},0 z" fill="${fill}" stroke="${stroke}" stroke-width="1.6"/><ellipse cx="${n.x + n.w / 2}" cy="${n.y + 8}" rx="${n.w / 2}" ry="8" fill="${fill}" stroke="${stroke}" stroke-width="1.6"/>`
+      : `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="${NH}" rx="${n.kind === "user" ? 23 : 11}" fill="${fill}" stroke="${stroke}" stroke-width="1.6" ${n.kind === "ext" ? 'stroke-dasharray="5 4"' : ""}/>`;
+    return `${shape}<text x="${n.x + n.w / 2}" y="${n.y + NH / 2 + 5 + (n.kind === "db" ? 3 : 0)}" text-anchor="middle" font-size="13.5" font-weight="600" fill="#0f172a">${esc(n.name)}</text>`;
+  }
+
   function finishDiagram(el, title, W, H, paths, order, NH) {
-    const boxes = order.map((n) => {
-      const [fill, stroke] = KIND[n.kind] || KIND.svc;
-      const shape = n.kind === "db"
-        ? `<path d="M${n.x},${n.y + 8} a${n.w / 2},8 0 0,0 ${n.w},0 v${NH - 16} a${n.w / 2},8 0 0,1 ${-n.w},0 z" fill="${fill}" stroke="${stroke}" stroke-width="1.6"/><ellipse cx="${n.x + n.w / 2}" cy="${n.y + 8}" rx="${n.w / 2}" ry="8" fill="${fill}" stroke="${stroke}" stroke-width="1.6"/>`
-        : `<rect x="${n.x}" y="${n.y}" width="${n.w}" height="${NH}" rx="${n.kind === "user" ? 23 : 11}" fill="${fill}" stroke="${stroke}" stroke-width="1.6" ${n.kind === "ext" ? 'stroke-dasharray="5 4"' : ""}/>`;
-      return `${shape}<text x="${n.x + n.w / 2}" y="${n.y + NH / 2 + 5 + (n.kind === "db" ? 3 : 0)}" text-anchor="middle" font-size="13.5" font-weight="600" fill="#0f172a">${esc(n.name)}</text>`;
-    });
+    const boxes = order.map((n) => nodeBox(n, NH));
     const defs = `<defs><marker id="rka" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker><marker id="rkb" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/></marker></defs>`;
     el.innerHTML = `<div class="rk-card rk-diagram">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}<div class="rk-scroll"><svg viewBox="0 0 ${W} ${H}" style="max-width:${W}px;min-width:${Math.min(W, 640)}px;margin:0 auto">${defs}${paths.map((x) => x.p).join("")}${boxes.join("")}${paths.map((x) => x.l).join("")}</svg></div></div>`;
+  }
+
+  // Sequence: "A -> B: call", "B --> A: reply", "A -> A: self", "note: text". Participants in order of first mention.
+  function sequence(el, ls, meta) {
+    meta = meta || {};
+    const title = meta.title || el.getAttribute("title") || "";
+    ls = ls || lines(rawText(el));
+    const parts = new Map(), rows = [];
+    const who = (tok) => {
+      const m = tok.trim().match(/^(.*?)\s*(?:\[(\w+)\])?$/), name = m[1].trim();
+      if (!name) return null;
+      if (!parts.has(name)) parts.set(name, { name, kind: "svc", i: parts.size });
+      if (m[2]) parts.get(name).kind = m[2].toLowerCase();
+      return parts.get(name);
+    };
+    for (const l of ls) {
+      let m;
+      // "Note over API: x" also works; [^:>] keeps a participant named "note" usable.
+      if ((m = l.match(/^note\b[^:>]*:\s*(.+)$/i))) rows.push({ note: m[1] });
+      else if ((m = l.match(/^(.+?)\s*(-->|->)\s*([^:]+?)\s*(?::\s*(.*))?$/))) {
+        const a = who(m[1]), b = a && who(m[3]);
+        if (b) rows.push({ a, b, label: m[4] || "", reply: m[2] === "-->" });
+      }
+    }
+    const P = [...parts.values()];
+    if (!P.length) return;
+    const NH = 46, LC = 6.9;
+    P.forEach((p) => (p.w = Math.max(110, p.name.length * 7.6 + 36)));
+    const labW = (r) => 26 + r.label.length * LC; // number badge + text
+    const gap = P.slice(1).map((p, i) => (P[i].w + p.w) / 2 + 24);
+    let tail = P[P.length - 1].w / 2;
+    // Widen gaps until every label fits between its lifelines; short spans first, so long ones only add what is still missing.
+    rows.filter((r) => !r.note).sort((x, y) => Math.abs(x.a.i - x.b.i) - Math.abs(y.a.i - y.b.i)).forEach((r) => {
+      const lo = Math.min(r.a.i, r.b.i), hi = Math.max(r.a.i, r.b.i);
+      if (lo === hi) {
+        const need = Math.max(labW(r) + 22, 52);
+        if (lo < gap.length) gap[lo] = Math.max(gap[lo], need); else tail = Math.max(tail, need);
+        return;
+      }
+      const need = labW(r) + 36, have = gap.slice(lo, hi).reduce((s, g) => s + g, 0);
+      if (have < need) for (let k = lo; k < hi; k++) gap[k] += (need - have) / (hi - lo);
+    });
+    let x = 16 + P[0].w / 2;
+    P.forEach((p, i) => { if (i) x += gap[i - 1]; p.cx = x; p.x = x - p.w / 2; p.y = 16; });
+    let W = x + tail + 16;
+    rows.forEach((r) => { if (r.note) W = Math.max(W, r.note.length * LC + 64); });
+    // Number badge and label sit on a white chip so the lifelines never run through the text.
+    const label = (n, sx, by, text) => `<rect x="${sx - 4}" y="${by - 14}" width="${26 + text.length * LC + 8}" height="20" rx="6" fill="#fff"/><circle cx="${sx + 8}" cy="${by - 4}" r="8.5" fill="#4f46e5"/><text x="${sx + 8}" y="${by - 0.5}" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">${n}</text><text x="${sx + 22}" y="${by}" font-size="12" fill="#334155">${esc(text)}</text>`;
+    let y = 16 + NH + 8, n = 0;
+    const out = rows.map((r) => {
+      if (r.note) {
+        const s = `<rect x="12" y="${y + 10}" width="${W - 24}" height="28" rx="8" fill="#fffbeb" stroke="#fde68a"/><text x="${W / 2}" y="${y + 28.5}" text-anchor="middle" font-size="12" fill="#92400e">${esc(r.note)}</text>`;
+        y += 48; return s;
+      }
+      n++;
+      const ay = y + 32, dash = r.reply ? ' stroke-dasharray="6 5"' : "", { a, b } = r;
+      let s;
+      if (a === b) {
+        s = `<path d="M${a.cx},${ay} H${a.cx + 32} V${ay + 18} H${a.cx + 3}" fill="none" stroke="#64748b" stroke-width="1.6"${dash} marker-end="url(#rksa)"/>` + label(n, a.cx + 8, ay - 8, r.label);
+        y += 66;
+      } else {
+        const dir = b.cx > a.cx ? 1 : -1, x2 = b.cx - dir * 2;
+        s = `<line x1="${a.cx}" y1="${ay}" x2="${x2}" y2="${ay}" stroke="#64748b" stroke-width="1.6"${dash} marker-end="url(#rksa)"/>` + label(n, (a.cx + b.cx) / 2 - labW(r) / 2, ay - 8, r.label);
+        y += 46;
+      }
+      return s;
+    });
+    const H = y + 16;
+    const life = P.map((p) => `<line x1="${p.cx}" y1="${16 + NH}" x2="${p.cx}" y2="${H - 8}" stroke="#cbd5e1" stroke-width="1.4" stroke-dasharray="4 5"/>`).join("");
+    const defs = `<defs><marker id="rksa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker></defs>`;
+    el.innerHTML = `<div class="rk-card rk-sequence">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}<div class="rk-scroll"><svg viewBox="0 0 ${W} ${H}" style="max-width:${W}px;min-width:${Math.min(W, 640)}px;margin:0 auto">${defs}${life}${P.map((p) => nodeBox(p, NH)).join("")}${out.join("")}</svg></div></div>`;
   }
 
   function steps(el, ls) {
@@ -949,6 +1023,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
   const FENCES = {
     chart: (ls) => { const m = splitMeta(ls, ["title", "type", "unit", "noavg"]); return mk(chart, ls, m); },
     diagram: (ls) => { const m = splitMeta(ls, ["title", "direction"]); return mk(diagram, ls, m); },
+    sequence: (ls) => { const m = splitMeta(ls, ["title"]); return mk(sequence, ls, m); },
     board: (ls) => { const m = splitMeta(ls, ["title", "columns"]); return mk(board, ls, m); },
     compare: (ls) => { const m = splitMeta(ls, ["title", "lower"]); return mk(compare, ls, m); },
     progress: (ls) => { const m = splitMeta(ls, ["title", "good", "bad"]); return mk(progress, ls, m); },
@@ -1079,7 +1154,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
 
   // Plain HTML the agent wrote (<p>, <li>, callout text...): same inline formatting as the components,
   // so **bold**, `code`, [done] and CHK-1 work in any text. Component data and code are left alone.
-  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-progress,rk-matrix,rk-timeline,rk-diff,rk-toc,rk-pill";
+  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-progress,rk-matrix,rk-timeline,rk-diff,rk-toc,rk-sequence,rk-pill";
   function formatText(root) {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const todo = [];
@@ -1129,6 +1204,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     run("rk-table", (el) => table(el));
     run("rk-callout", (el) => callout(el));
     run("rk-diagram", (el) => diagram(el));
+    run("rk-sequence", (el) => sequence(el));
     run("rk-steps", (el) => steps(el));
     run("rk-progress", (el) => progress(el));
     run("rk-timeline", (el) => timeline(el));
