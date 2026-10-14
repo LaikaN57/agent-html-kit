@@ -30,6 +30,9 @@ Mon: 3
 ID | Item | Status
 CHK-1 | Apple Pay | [done]
 </rk-table>
+<rk-compare title="..." lower-is-better>                before/after, one per line: Label | before | after
+p95 latency | 420ms | 310ms                             (kit computes the change; trailing | lower or | higher flips one row)
+</rk-compare>
 <rk-callout kind="risk|warn|note|ok" title="...">text</rk-callout>
 <rk-diagram title="...">                                one edge per line: A -> B: label
 Browser [user] -> API: HTTPS                            node kinds: [user] [svc] [db] [queue] [cache] [ext]
@@ -57,6 +60,8 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
   chart    optional header lines "title: ...", "type: bar|line|hbar", "unit: ms", then "Label: number" lines
   diagram  optional "title: ...", then one edge per line "A -> B: label";
            node kinds [user] [svc] [db] [queue] [cache] [ext], e.g. "Browser [user] -> API: HTTPS"
+  compare  optional "title: ...", "lower: yes", then "Label | before | after" lines
+           (e.g. "p95 latency | 420ms | 310ms"; add "| lower" or "| higher" to flip one row)
   steps    numbered steps, one per line "Title | detail"
   board    "title: ...", "columns: Now,Next,Later,Cut", then "ID | title | column" lines;
            renders a drag-and-drop board with markdown export (items without a column start in Inbox)

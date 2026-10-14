@@ -117,6 +117,13 @@ background:var(--soft);color:var(--accent);font-weight:750;font-size:14px}
 .rk-item.pick{outline:2px solid var(--accent);outline-offset:1px}
 .rk-board .hint{font-size:12px;color:var(--muted);margin:-4px 0 10px}
 @media (max-width:700px){.rk-board .lanes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.rk-cmp .rk-ctitle{padding:14px 14px 0;margin:0}
+.rk-cmp th:nth-child(n+2),.rk-cmp td:nth-child(n+2){text-align:right}.rk-cmp td:nth-child(4){white-space:nowrap}
+@media (max-width:700px){.rk-cmp th,.rk-cmp td{padding:10px 8px}.rk-cmp .rk-ctitle{padding:12px 8px 0}}
+.rk-cmp td:nth-child(3){font-weight:650;color:var(--ink)}
+.rk-cmp .d{display:inline-block;font-size:12.5px;font-weight:700;padding:2px 9px;border-radius:999px;color:var(--gray);background:var(--gray-bg)}
+.rk-cmp .d.good{color:var(--green);background:var(--green-bg)}.rk-cmp .d.bad{color:var(--red);background:var(--red-bg)}
+.rk-cmp .a{font-size:12px;color:var(--muted);margin-top:3px}
 .rk-btn{font:650 13px var(--font);color:#fff;background:var(--accent);border:0;border-radius:10px;padding:8px 14px;cursor:pointer}
 .rk-out{width:100%;min-height:120px;margin-top:10px;font:13px/1.5 var(--mono);border:1px solid var(--line);border-radius:10px;padding:10px;display:none}
 body.rk-plain{background:#fff;color:#1f2328;font:16px/1.6 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
@@ -543,6 +550,37 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
     }).join("")}</ol>`;
   }
 
+  // Compare: "Label | before | after [| lower|higher]". Values keep their units as written;
+  // the kit computes the change and colors it, so the writer never does the arithmetic.
+  const parseVal = (s) => {
+    const m = String(s).match(/^(.*?)(-?(?:\d[\d,]*)?\.?\d+)(.*)$/);
+    return m ? { pre: m[1], n: Number(m[2].replace(/,/g, "")), dp: (m[2].split(".")[1] || "").length, suf: m[3] } : null;
+  };
+  function compare(el, ls, meta) {
+    meta = meta || {};
+    const title = meta.title || el.getAttribute("title") || "";
+    const lower = meta.lower ? /^(yes|true|1)$/i.test(meta.lower) : el.hasAttribute("lower-is-better");
+    const rows = (ls || lines(rawText(el))).map(cells).filter((r) => r.length >= 3 && !/^before$/i.test(r[1]));
+    if (!rows.length) return;
+    const MINUS = "\u2212";
+    const row = ([label, b, a, dir]) => {
+      const x = parseVal(b), y = parseVal(a);
+      let change = "\u2014";
+      // Only compare like with like: "1.2s" vs "800ms" gets no computed change rather than a wrong one.
+      if (x && y && x.pre.trim() === y.pre.trim() && x.suf.trim() === y.suf.trim()) {
+        const d = y.n - x.n, dp = Math.max(x.dp, y.dp);
+        const low = /^lower$/i.test(dir || "") || (lower && !/^higher$/i.test(dir || ""));
+        const cls = d === 0 ? "flat" : (d > 0) !== low ? "good" : "bad";
+        const pct = x.n ? `${Math.abs((d / x.n) * 100).toFixed(1)}%` : "";
+        const abs = `${d < 0 ? MINUS : d > 0 ? "+" : ""}${y.pre}${Math.abs(d).toFixed(dp)}${y.suf.trim() === "%" ? " pp" : y.suf}`;
+        change = `<span class="d ${cls}">${d > 0 ? "\u25b2 " : d < 0 ? "\u25bc " : ""}${esc(pct || abs)}</span>${pct ? `<div class="a">${esc(abs)}</div>` : ""}`;
+      }
+      return `<tr><td>${inline(label)}</td><td>${inline(b)}</td><td>${inline(a)}</td><td>${change}</td></tr>`;
+    };
+    el.innerHTML = `<div class="rk-tablewrap rk-card rk-cmp">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}<table style="border:0;box-shadow:none;border-radius:0"><thead><tr><th>Metric</th><th>Before</th><th>After</th><th>Change</th></tr></thead><tbody>${
+      rows.map(row).join("")}</tbody></table></div>`;
+  }
+
   // Board: "ID | title | column" items, drag between columns, export as markdown.
   function board(el, ls, meta) {
     meta = meta || {};
@@ -603,6 +641,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     chart: (ls) => { const m = splitMeta(ls, ["title", "type", "unit", "noavg"]); return mk(chart, ls, m); },
     diagram: (ls) => { const m = splitMeta(ls, ["title", "direction"]); return mk(diagram, ls, m); },
     board: (ls) => { const m = splitMeta(ls, ["title", "columns"]); return mk(board, ls, m); },
+    compare: (ls) => { const m = splitMeta(ls, ["title", "lower"]); return mk(compare, ls, m); },
     stats: (ls) => mk(stats, ls),
     steps: (ls) => mk(steps, ls),
   };
@@ -701,7 +740,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
 
   // Plain HTML the agent wrote (<p>, <li>, callout text...): same inline formatting as the components,
   // so **bold**, `code`, [done] and CHK-1 work in any text. Component data and code are left alone.
-  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-pill";
+  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-pill";
   function formatText(root) {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const todo = [];
@@ -753,6 +792,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     run("rk-diagram", (el) => diagram(el));
     run("rk-steps", (el) => steps(el));
     run("rk-board", (el) => board(el));
+    run("rk-compare", (el) => compare(el));
     run("rk-pill", (el) => { el.outerHTML = pill((el.getAttribute("s") || "todo").toLowerCase(), el.textContent.trim()); });
     run("table", (t) => { if (!t.closest(".rk-tablewrap")) { const w = document.createElement("div"); w.className = "rk-tablewrap"; t.replaceWith(w); w.appendChild(t); } });
     document.documentElement.dataset.rkReady = "1";
