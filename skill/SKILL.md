@@ -34,6 +34,9 @@ CHK-1 | Apple Pay | [done]
 <rk-diagram title="...">                                one edge per line: A -> B: label
 Browser [user] -> API: HTTPS                            node kinds: [user] [svc] [db] [queue] [cache] [ext]
 </rk-diagram>
+<rk-sequence title="...">                               call order, one message per line: A -> B: call
+Client [user] -> API: POST /pay                         B --> A: reply (dashed), A -> A: self call, note: text (band)
+</rk-sequence>
 <rk-steps>                                              numbered steps, one per line: Title | detail
 Parse input | reject bad rows
 </rk-steps>
@@ -57,6 +60,8 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
   chart    optional header lines "title: ...", "type: bar|line|hbar", "unit: ms", then "Label: number" lines
   diagram  optional "title: ...", then one edge per line "A -> B: label";
            node kinds [user] [svc] [db] [queue] [cache] [ext], e.g. "Browser [user] -> API: HTTPS"
+  sequence optional "title: ...", then one message per line: "A -> B: call", "B --> A: reply",
+           "A -> A: self call", "note: text"; same node kinds as diagram
   steps    numbered steps, one per line "Title | detail"
   board    "title: ...", "columns: Now,Next,Later,Cut", then "ID | title | column" lines;
            renders a drag-and-drop board with markdown export (items without a column start in Inbox)
