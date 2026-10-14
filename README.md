@@ -103,7 +103,7 @@ Tue: 6
 ```
 
 Components: `rk-header`, `rk-stats`, `rk-chart`, `rk-table`, `rk-compare`, `rk-callout`,
-`rk-diagram`, `rk-steps`, `rk-board`, `rk-progress`, `rk-cols`. In any text, `**bold**`, `` `code` ``,
+`rk-diagram`, `rk-steps`, `rk-board`, `rk-progress`, `rk-matrix`, `rk-cols`. In any text, `**bold**`, `` `code` ``,
 `[done]`-style status pills and ticket IDs like `CHK-101` are formatted. The full contract
 the agent gets is `bench/contracts/html.txt` (634 input tokens per call). Examples are in
 `examples/`; open them in a browser.
@@ -115,7 +115,7 @@ card and then a column; with a keyboard, focus a card and press the column's num
 
 ![A triage board written with the kit](docs/kit-board.png)
 
-Prefer markdown? Write it with the fenced `chart`, `compare`, `diagram`, `steps`, `board` and `progress`
+Prefer markdown? Write it with the fenced `chart`, `compare`, `diagram`, `steps`, `board`, `progress` and `matrix`
 blocks and render it:
 
 ```bash
