@@ -103,8 +103,9 @@ Tue: 6
 ```
 
 Components: `rk-header`, `rk-stats`, `rk-chart`, `rk-table`, `rk-callout`,
-`rk-diagram`, `rk-steps`, `rk-board`, `rk-cols`. In any text, `**bold**`, `` `code` ``,
-`[done]`-style status pills and ticket IDs like `CHK-101` are formatted. The full contract
+`rk-diagram`, `rk-steps`, `rk-board`, `rk-cols`, `rk-toc` (table of contents; `[toc]` in
+markdown). In any text, `**bold**`, `` `code` ``, `[done]`-style status pills and ticket
+IDs like `CHK-101` are formatted. The full contract
 the agent gets is `bench/contracts/html.txt` (634 input tokens per call). Examples are in
 `examples/`; open them in a browser.
 

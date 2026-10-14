@@ -2,6 +2,8 @@
 
 stats: 1 function | 5 output keys | 3 regions | 2 coupons | 3 error messages | 0 floats
 
+[toc]
+
 ## 1. Goal
 
 Create a Python module `pricing.py` that exposes one public function:
