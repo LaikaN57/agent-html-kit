@@ -37,6 +37,9 @@ Browser [user] -> API: HTTPS                            node kinds: [user] [svc]
 <rk-steps>                                              numbered steps, one per line: Title | detail
 Parse input | reject bad rows
 </rk-steps>
+<rk-timeline title="...">                               dated milestones, one per line: date | title | detail
+2026-10-01 | Cutover | [done]                           (YYYY-MM-DD, YYYY-MM or 14:05; sorted, dot = first pill)
+</rk-timeline>
 <rk-board title="..." columns="Now,Next,Later,Cut">     drag-and-drop board with markdown export
 ID | title | column (optional, items start in Inbox)
 </rk-board>
@@ -58,6 +61,8 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
   diagram  optional "title: ...", then one edge per line "A -> B: label";
            node kinds [user] [svc] [db] [queue] [cache] [ext], e.g. "Browser [user] -> API: HTTPS"
   steps    numbered steps, one per line "Title | detail"
+  timeline optional "title: ...", then "date | title | detail" lines; dates YYYY-MM-DD, YYYY-MM
+           or 14:05 are sorted, a pill like [done] colors the dot
   board    "title: ...", "columns: Now,Next,Later,Cut", then "ID | title | column" lines;
            renders a drag-and-drop board with markdown export (items without a column start in Inbox)
 
