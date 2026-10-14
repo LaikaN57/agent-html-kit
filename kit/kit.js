@@ -119,6 +119,22 @@ background:var(--soft);color:var(--accent);font-weight:750;font-size:14px}
 @media (max-width:700px){.rk-board .lanes{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .rk-btn{font:650 13px var(--font);color:#fff;background:var(--accent);border:0;border-radius:10px;padding:8px 14px;cursor:pointer}
 .rk-out{width:100%;min-height:120px;margin-top:10px;font:13px/1.5 var(--mono);border:1px solid var(--line);border-radius:10px;padding:10px;display:none}
+rk-tabs{display:block;margin:16px 0}
+.rk-tabbar{display:flex;width:fit-content;max-width:100%;overflow-x:auto;gap:4px;padding:4px;margin:0 0 14px;background:#e9edf3;border-radius:12px}
+.rk-tab{font:650 13.5px var(--font);color:var(--muted);background:none;border:0;border-radius:9px;padding:7px 14px;cursor:pointer;white-space:nowrap}
+.rk-tab:hover{color:var(--ink)}
+.rk-tab[aria-selected="true"]{background:var(--card);color:var(--accent);box-shadow:0 1px 2px rgba(15,23,42,.08)}
+.rk-tab:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+rk-tabs>section:focus-visible{outline:2px solid var(--soft);outline-offset:4px;border-radius:4px}
+.rk-ptitle{display:none}
+rk-tabs>section>.rk-ptitle+*{margin-top:0}
+.rk-page details{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);margin:0 0 16px;padding:0 18px}
+.rk-page details[open]{padding-bottom:4px}
+.rk-page summary{display:flex;align-items:center;gap:12px;padding:13px 0;margin:0;font-weight:650;color:var(--ink);cursor:pointer;list-style:none}
+.rk-page summary::-webkit-details-marker{display:none}
+.rk-page summary::before{content:"";flex:none;width:7px;height:7px;margin:0 2px;border:solid var(--muted);border-width:0 2px 2px 0;transform:rotate(-45deg);transition:transform .15s}
+.rk-page details[open]>summary{border-bottom:1px solid var(--line);margin-bottom:14px}
+.rk-page details[open]>summary::before{transform:rotate(45deg)}
 body.rk-plain{background:#fff;color:#1f2328;font:16px/1.6 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
 body.rk-plain .rk-page{max-width:900px}
 body.rk-plain .rk-page h1,body.rk-plain .rk-page h2{font-size:24px;letter-spacing:0;text-transform:none;color:#1f2328;border-bottom:1px solid #d1d9e0;padding-bottom:6px;margin:28px 0 14px}
@@ -131,6 +147,10 @@ body.rk-plain .rk-page code{background:#eff1f3;color:#1f2328}
 body.rk-plain .rk-card{box-shadow:none;border-radius:6px}
 body.rk-plain .rk-page>ul,body.rk-plain .rk-page>ol{background:none;border:0;box-shadow:none;padding:0 0 0 26px}
 body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0}
+body.rk-plain .rk-page details{box-shadow:none;border-radius:6px}
+/* Plain and print: no tab bar, every panel stacked under its title. */
+body.rk-plain .rk-tabbar{display:none}body.rk-plain rk-tabs>section[hidden]{display:block}body.rk-plain .rk-ptitle{display:block}
+@media print{.rk-tabbar{display:none}rk-tabs>section[hidden]{display:block}.rk-ptitle{display:block}}
 `;
 
   const PILLS = {
@@ -597,6 +617,44 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     });
   }
 
+  // Tabs: each <section title="..."> child becomes a panel. boot() runs this after the other
+  // components, and none of them measure layout, so charts in hidden panels draw like visible ones.
+  let tabGroups = 0;
+  function tabs(el) {
+    const secs = [...el.children].filter((c) => c.tagName === "SECTION");
+    if (!secs.length) return;
+    const g = ++tabGroups, bar = document.createElement("div");
+    bar.className = "rk-tabbar"; bar.setAttribute("role", "tablist");
+    const btns = secs.map((s, i) => {
+      const name = inline(s.getAttribute("title") || `Tab ${i + 1}`);
+      s.id ||= `rk-tab${g}-${i + 1}`;
+      s.removeAttribute("title"); // no tooltip over the whole panel
+      s.setAttribute("role", "tabpanel"); s.setAttribute("aria-labelledby", s.id + "-tab"); s.tabIndex = 0;
+      s.insertAdjacentHTML("afterbegin", `<h3 class="rk-ptitle">${name}</h3>`); // shown in plain and print only
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "rk-tab"; b.id = s.id + "-tab"; b.innerHTML = name;
+      b.setAttribute("role", "tab"); b.setAttribute("aria-controls", s.id);
+      b.addEventListener("click", () => show(i, true));
+      bar.appendChild(b);
+      return b;
+    });
+    bar.addEventListener("keydown", (e) => {
+      const k = btns.indexOf(document.activeElement), n = btns.length;
+      const to = { ArrowRight: k + 1, ArrowLeft: k - 1, Home: 0, End: n - 1 }[e.key];
+      if (k < 0 || to === undefined) return;
+      e.preventDefault(); show((to + n) % n, true); btns[(to + n) % n].focus();
+    });
+    function show(k, remember) {
+      btns.forEach((b, i) => { b.setAttribute("aria-selected", i === k); b.tabIndex = i === k ? 0 : -1; secs[i].hidden = i !== k; });
+      // The URL hash remembers the tab; replaceState so tab clicks do not fill the back button.
+      if (remember) try { history.replaceState(null, "", "#" + secs[k].id); } catch {}
+    }
+    el.prepend(bar);
+    // Open the tab the hash points at, or the one holding the element it points at.
+    const h = decodeURIComponent(location.hash.slice(1));
+    show(Math.max(0, h ? secs.findIndex((s) => s.id === h || s.querySelector(`[id="${CSS.escape(h)}"]`)) : 0));
+  }
+
   /* ---------- markdown renderer (for .md written by the agent) ---------- */
 
   const FENCES = {
@@ -631,7 +689,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
   function renderMarkdown(src, plain) {
     const root = document.createElement("div");
     const L = src.replace(/\r/g, "").split("\n");
-    let i = 0, para = [];
+    let i = 0, para = [], tabSet = null;
     const flush = () => {
       if (para.length) { const p = document.createElement("p"); p.innerHTML = inline(para.join(" "), !plain); root.appendChild(p); para = []; }
     };
@@ -639,6 +697,30 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     while (i < L.length) {
       const line = L[i];
       let m;
+      // "+++ Title" ... "+++" folds its content into a <details>; consecutive "+++ tab: Name" blocks
+      // become one rk-tabs. The content is markdown again, so blocks nest.
+      if ((m = line.match(/^\+\+\+\s*(\S.*)$/))) {
+        flush();
+        const body = [];
+        let depth = 1, code = false;
+        for (i++; i < L.length; i++) {
+          if (/^```/.test(L[i])) code = !code;
+          else if (!code && /^\+\+\+\s*\S/.test(L[i])) depth++;
+          else if (!code && /^\+\+\+\s*$/.test(L[i]) && !--depth) break;
+          body.push(L[i]);
+        }
+        i++;
+        const inner = renderMarkdown(body.join("\n"), plain).childNodes, tab = m[1].match(/^tab:\s*(.*)$/i);
+        if (tab) {
+          if (!tabSet || root.lastChild !== tabSet) root.appendChild((tabSet = document.createElement("rk-tabs")));
+          const s = document.createElement("section");
+          s.setAttribute("title", tab[1]); s.append(...inner); tabSet.appendChild(s);
+        } else {
+          const d = document.createElement("details");
+          d.innerHTML = `<summary>${inline(m[1], !plain)}</summary>`; d.append(...inner); root.appendChild(d);
+        }
+        continue;
+      }
       if ((m = line.match(/^```\s*(\w*)/))) {
         flush();
         const lang = m[1].toLowerCase(), body = [];
@@ -753,6 +835,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     run("rk-diagram", (el) => diagram(el));
     run("rk-steps", (el) => steps(el));
     run("rk-board", (el) => board(el));
+    run("rk-tabs", (el) => tabs(el)); // after the components, so hidden panels hold finished drawings
     run("rk-pill", (el) => { el.outerHTML = pill((el.getAttribute("s") || "todo").toLowerCase(), el.textContent.trim()); });
     run("table", (t) => { if (!t.closest(".rk-tablewrap")) { const w = document.createElement("div"); w.className = "rk-tablewrap"; t.replaceWith(w); w.appendChild(t); } });
     document.documentElement.dataset.rkReady = "1";

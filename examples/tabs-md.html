@@ -1,0 +1,57 @@
+<!doctype html><meta charset="utf-8"><script src="../kit/kit.js" defer></script>
+<rk-md><script type="text/markdown">
+# Checkout release 4.2: readiness review
+
+## Release status
+
++++ tab: Summary
+stats: 6 items in scope | 4 done | 1 blocked
+
+| ID | Item | Status |
+|---|---|---|
+| CHK-101 | Apple Pay button | [done] |
+| CHK-103 | Retry queue for payment webhooks | [done] |
+| CHK-104 | Fraud score threshold tuning | [blocked] |
+| CHK-106 | Guest checkout A/B test | [progress] |
++++
+
++++ tab: Latency
+```chart
+title: Cart service p95 latency (ms)
+type: line
+Wk 37: 560
+Wk 38: 545
+Wk 39: 530
+Wk 40: 470
+Wk 41: 412
+```
++++
+
++++ tab: Architecture
+```diagram
+title: Payment webhook path
+Stripe [ext] -> Webhook API: POST /hook
+Webhook API -> Retry queue [queue]: enqueue
+Retry queue [queue] -> Payments [svc]: deliver
+Payments [svc] -> Orders DB [db]: write once
+```
++++
+
+## Details
+
++++ Rollback plan
+Turn off the **checkout_v42** flag. No data migration runs in this release, so a rollback needs no cleanup.
+
+```steps
+Disable the flag | takes effect in under a minute
+Drain the retry queue | let in-flight webhooks finish
+Confirm error rate | back under 0.1% within 10 minutes
+```
++++
+
++++ Open questions for legal
+- Can the fraud threshold change ship before sign-off (CHK-104)?
+- Do we need a new consent notice for Apple Pay?
++++
+
+</script></rk-md>

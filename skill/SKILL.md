@@ -41,6 +41,8 @@ Parse input | reject bad rows
 ID | title | column (optional, items start in Inbox)
 </rk-board>
 <rk-cols><div>...</div><div>...</div></rk-cols>         side-by-side columns
+<rk-tabs><section title="Name">...</section></rk-tabs>   tabs, one section per tab; any content, components too
+<details><summary>Title</summary>...</details>          collapsible card, closed until clicked
 
 ## Or write markdown and render it
 
@@ -53,6 +55,8 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
 - Status pills anywhere, including table cells: [done] [progress] [blocked] [todo] [warn].
 - IDs like ABC-123 become chips.
 - Blockquotes starting "Risk:", "Warning:", "Note:" or "OK:" become colored callouts.
+- A line "+++ Title" opens a collapsible block and a line "+++" closes it; the content is
+  normal markdown. Consecutive "+++ tab: Name" blocks become tabs.
 - Fenced blocks by language:
   chart    optional header lines "title: ...", "type: bar|line|hbar", "unit: ms", then "Label: number" lines
   diagram  optional "title: ...", then one edge per line "A -> B: label";
