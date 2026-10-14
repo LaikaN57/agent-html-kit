@@ -103,10 +103,9 @@ Tue: 6
 ```
 
 Components: `rk-header`, `rk-stats`, `rk-chart`, `rk-table`, `rk-compare`, `rk-callout`,
-`rk-diagram`, `rk-steps`, `rk-board`, `rk-progress`, `rk-matrix`, `rk-timeline`, `rk-diff`,
-`rk-toc`, `[toc]`, `**bold**`, ` `, `, `, `-style status pills and ticket
-IDs like `,
-`rk-tabs`, `<details>`, `rk-sequence`, `rk-cols`. In any text, `**bold**`, `` `code` ``,
+`rk-diagram`, `rk-sequence`, `rk-steps`, `rk-progress`, `rk-timeline`, `rk-board`, `rk-matrix`,
+`rk-diff`, `rk-cols`, `rk-toc` (table of contents; `[toc]` in markdown) and `rk-tabs` (plain
+`<details>` is styled as a collapsible card). In any text, `**bold**`, `` `code` ``,
 `[done]`-style status pills and ticket IDs like `CHK-101` are formatted. The full contract
 the agent gets is `bench/contracts/html.txt` (634 input tokens per call). Examples are in
 `examples/`; open them in a browser.
@@ -118,8 +117,9 @@ card and then a column; with a keyboard, focus a card and press the column's num
 
 ![A triage board written with the kit](docs/kit-board.png)
 
-Prefer markdown? Write it with the fenced `chart`, `compare`, `diagram`, `steps`, `board`, `progress`, `matrix`, `timeline`, `diff`, `+++ Title`, `+++`, `+++ tab: Name` and `sequence`
-blocks and render it:
+Prefer markdown? Write it with the fenced `chart`, `compare`, `diagram`, `sequence`, `steps`,
+`progress`, `timeline`, `board`, `matrix` and `diff` blocks, and `+++ Title` ... `+++` for
+collapsible blocks (`+++ tab: Name` for tabs), and render it:
 
 ```bash
 node kit/md2html.js report.md          # -> report.html with kit components
