@@ -1,0 +1,55 @@
+<!doctype html><meta charset="utf-8"><script src="../kit/kit.js" defer></script>
+<rk-header title="Checkout release 4.2: readiness review" sub="Team Checkout · Week 41"></rk-header>
+
+<h2>Release status</h2>
+<rk-tabs>
+<section title="Summary">
+<rk-stats>
+6 | Items in scope | 
+4 | Done | +2 since Monday
+1 | Blocked | !CHK-104
+</rk-stats>
+<rk-table>
+ID | Item | Status
+CHK-101 | Apple Pay button | [done]
+CHK-103 | Retry queue for payment webhooks | [done]
+CHK-104 | Fraud score threshold tuning | [blocked]
+CHK-106 | Guest checkout A/B test | [progress]
+</rk-table>
+</section>
+<section title="Latency">
+<rk-chart type="line" title="Cart service p95 latency (ms)">
+Wk 37: 560
+Wk 38: 545
+Wk 39: 530
+Wk 40: 470
+Wk 41: 412
+</rk-chart>
+</section>
+<section title="Architecture">
+<rk-diagram title="Payment webhook path">
+Stripe [ext] -> Webhook API: POST /hook
+Webhook API -> Retry queue [queue]: enqueue
+Retry queue [queue] -> Payments [svc]: deliver
+Payments [svc] -> Orders DB [db]: write once
+</rk-diagram>
+</section>
+</rk-tabs>
+
+<h2>Details</h2>
+<details>
+<summary>Rollback plan</summary>
+<p>Turn off the **checkout_v42** flag. No data migration runs in this release, so a rollback needs no cleanup.</p>
+<rk-steps>
+Disable the flag | takes effect in under a minute
+Drain the retry queue | let in-flight webhooks finish
+Confirm error rate | back under 0.1% within 10 minutes
+</rk-steps>
+</details>
+<details>
+<summary>Open questions for legal</summary>
+<ul>
+<li>Can the fraud threshold change ship before sign-off (CHK-104)?</li>
+<li>Do we need a new consent notice for Apple Pay?</li>
+</ul>
+</details>

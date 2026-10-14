@@ -57,6 +57,8 @@ ID | title | y-level | x-level                          levels high|low, e.g. CH
 </rk-diff>
 <rk-cols><div>...</div><div>...</div></rk-cols>         side-by-side columns
 <rk-toc></rk-toc>                                       table of contents from the h2/h3 headings (depth="2": h2 only)
+<rk-tabs><section title="Name">...</section></rk-tabs>   tabs, one section per tab; any content, components too
+<details><summary>Title</summary>...</details>          collapsible card, closed until clicked
 
 ## Or write markdown and render it
 
@@ -70,6 +72,8 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
 - IDs like ABC-123 become chips.
 - A line "[toc]" alone becomes a table of contents of the ## and ### headings.
 - Blockquotes starting "Risk:", "Warning:", "Note:" or "OK:" become colored callouts.
+- A line "+++ Title" opens a collapsible block and a line "+++" closes it; the content is
+  normal markdown. Consecutive "+++ tab: Name" blocks become tabs.
 - Fenced blocks by language:
   chart    optional header lines "title: ...", "type: bar|line|hbar", "unit: ms", then "Label: number" lines
   diagram  optional "title: ...", then one edge per line "A -> B: label";
