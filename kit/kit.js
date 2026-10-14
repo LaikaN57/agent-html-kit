@@ -103,6 +103,15 @@ rk-pill{display:contents}
 .rk-steps li::before{counter-increment:s;content:counter(s);flex:none;width:28px;height:28px;border-radius:9px;display:grid;place-items:center;
 background:var(--soft);color:var(--accent);font-weight:750;font-size:14px}
 .rk-steps .st{font-weight:650;color:var(--ink)}.rk-steps .sd{color:var(--ink2);font-size:14px}
+.rk-prog{padding:14px 20px;margin:0 0 16px}
+.rk-prog .g{padding:8px 0}
+.rk-prog .top{display:flex;justify-content:space-between;align-items:baseline;gap:14px;font-size:14px;color:var(--ink2)}
+.rk-prog .lab{min-width:0;overflow-wrap:anywhere}
+.rk-prog .num{flex:none;white-space:nowrap;font-variant-numeric:tabular-nums}.rk-prog .num b{color:var(--c2);margin-left:2px}
+.rk-prog .bar{height:8px;border-radius:99px;background:var(--gray-bg);overflow:hidden;margin-top:6px}
+.rk-prog .bar span{display:block;height:100%;border-radius:99px;background:var(--c)}
+.rk-prog .good{--c:#10b981;--c2:var(--green)}.rk-prog .mid{--c:#f59e0b;--c2:var(--amber)}.rk-prog .bad{--c:#ef4444;--c2:var(--red)}
+.rk-prog .all{border-top:1px solid var(--line);margin-top:6px;padding-top:14px}.rk-prog .all .lab{font-weight:650;color:var(--ink)}
 .rk-board{margin:0 0 16px}
 .rk-board .bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .rk-board .lanes{display:grid;gap:12px;grid-template-columns:repeat(var(--n),minmax(0,1fr))}
@@ -581,6 +590,46 @@ body.rk-plain .rk-page>ul li,body.rk-plain .rk-page>ol li{border:0;padding:2px 0
       rows.map(row).join("")}</tbody></table></div>`;
   }
 
+  // A written quantity: "$12,000", "34", "1.5 TB". Same number pattern as parsePoints, plus a prefix.
+  function qty(s) {
+    const m = String(s || "").match(/^([^\d\s.,-]*)\s*(-?(?:\d[\d,]*)?\.?\d+(?:e[+-]?\d+)?)(\s*)(\D*)$/i);
+    if (!m) return null;
+    const raw = m[2].replace(/,/g, ""), v = Number(raw);
+    return Number.isFinite(v) ? { v, pre: m[1], sep: m[3], suf: m[4].trim(), dp: /e/i.test(raw) ? 0 : (raw.split(".")[1] || "").length, comma: /,/.test(m[2]) } : null;
+  }
+
+  // Progress: "Label | value | target" (target defaults to 100). The kit computes %, color and the overall row.
+  function progress(el, ls, meta) {
+    meta = meta || {};
+    const title = meta.title || el.getAttribute("title") || "";
+    const thr = (k, d) => { const n = parseFloat(meta[k] ?? el.getAttribute(k)); return Number.isFinite(n) ? n : d; };
+    const good = thr("good", 80), bad = thr("bad", 50);
+    const rows = (ls || lines(rawText(el))).map(cells).map(([label, v, t]) => {
+      const val = qty(v), tgt = t ? qty(t) : null;
+      // A bad value, a bad target or a zero target cannot give a percentage: skip the line (this also drops a header row).
+      if (!val || (t && (!tgt || !tgt.v))) return null;
+      return { label, v, t, val, tgt: tgt || { ...val, v: 100 } };
+    }).filter(Boolean);
+    if (!rows.length) return;
+    const row = (label, num, pct, cls = "") => {
+      const tone = pct >= good ? "good" : pct < bad ? "bad" : "mid";
+      return `<div class="g ${tone} ${cls}"><div class="top"><span class="lab">${inline(label || "")}</span><span class="num">${num ? num + " · " : ""}<b>${Math.round(pct)}%</b></span></div><div class="bar"><span style="width:${Math.max(0, Math.min(100, pct))}%"></span></div></div>`;
+    };
+    let html = rows.map((r) => row(r.label, r.t ? `${esc(r.v)} / ${esc(r.t)}` : "", (100 * r.val.v) / r.tgt.v)).join("");
+    // Overall = sum of values / sum of targets, only when that sum means something (one shared unit).
+    const unit = (q) => q.pre + "|" + q.suf.toLowerCase();
+    if (rows.length >= 3 && rows.every((r) => unit(r.tgt) === unit(rows[0].tgt))) {
+      const sv = rows.reduce((a, r) => a + r.val.v, 0), st = rows.reduce((a, r) => a + r.tgt.v, 0);
+      if (st) {
+        const q = rows[0].tgt, dp = Math.max(...rows.map((r) => Math.max(r.val.dp, r.tgt.dp)));
+        const comma = rows.some((r) => r.val.comma || r.tgt.comma);
+        const f = (n) => q.pre + (comma ? n.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp }) : n.toFixed(dp)) + (q.suf ? q.sep + q.suf : "");
+        html += row("Overall", rows.every((r) => !r.t) ? "" : `${esc(f(sv))} / ${esc(f(st))}`, (100 * sv) / st, "all");
+      }
+    }
+    el.innerHTML = `<div class="rk-card rk-prog">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}${html}</div>`;
+  }
+
   // Board: "ID | title | column" items, drag between columns, export as markdown.
   function board(el, ls, meta) {
     meta = meta || {};
@@ -642,6 +691,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     diagram: (ls) => { const m = splitMeta(ls, ["title", "direction"]); return mk(diagram, ls, m); },
     board: (ls) => { const m = splitMeta(ls, ["title", "columns"]); return mk(board, ls, m); },
     compare: (ls) => { const m = splitMeta(ls, ["title", "lower"]); return mk(compare, ls, m); },
+    progress: (ls) => { const m = splitMeta(ls, ["title", "good", "bad"]); return mk(progress, ls, m); },
     stats: (ls) => mk(stats, ls),
     steps: (ls) => mk(steps, ls),
   };
@@ -740,7 +790,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
 
   // Plain HTML the agent wrote (<p>, <li>, callout text...): same inline formatting as the components,
   // so **bold**, `code`, [done] and CHK-1 work in any text. Component data and code are left alone.
-  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-pill";
+  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-progress,rk-pill";
   function formatText(root) {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const todo = [];
@@ -791,6 +841,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     run("rk-callout", (el) => callout(el));
     run("rk-diagram", (el) => diagram(el));
     run("rk-steps", (el) => steps(el));
+    run("rk-progress", (el) => progress(el));
     run("rk-board", (el) => board(el));
     run("rk-compare", (el) => compare(el));
     run("rk-pill", (el) => { el.outerHTML = pill((el.getAttribute("s") || "todo").toLowerCase(), el.textContent.trim()); });

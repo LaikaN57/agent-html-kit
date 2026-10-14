@@ -40,6 +40,9 @@ Browser [user] -> API: HTTPS                            node kinds: [user] [svc]
 <rk-steps>                                              numbered steps, one per line: Title | detail
 Parse input | reject bad rows
 </rk-steps>
+<rk-progress title="..." good="80" bad="50">            one goal per line: Label | value | target (default 100)
+Repos migrated | 34 | 50                                (kit computes %, colors and an overall row)
+</rk-progress>
 <rk-board title="..." columns="Now,Next,Later,Cut">     drag-and-drop board with markdown export
 ID | title | column (optional, items start in Inbox)
 </rk-board>
@@ -63,6 +66,7 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
   compare  optional "title: ...", "lower: yes", then "Label | before | after" lines
            (e.g. "p95 latency | 420ms | 310ms"; add "| lower" or "| higher" to flip one row)
   steps    numbered steps, one per line "Title | detail"
+  progress optional "title: ...", "good: 80", "bad: 50", then "Label | value | target" lines (target defaults to 100)
   board    "title: ...", "columns: Now,Next,Later,Cut", then "ID | title | column" lines;
            renders a drag-and-drop board with markdown export (items without a column start in Inbox)
 
