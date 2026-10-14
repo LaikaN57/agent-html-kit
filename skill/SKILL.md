@@ -40,6 +40,9 @@ Parse input | reject bad rows
 <rk-board title="..." columns="Now,Next,Later,Cut">     drag-and-drop board with markdown export
 ID | title | column (optional, items start in Inbox)
 </rk-board>
+<rk-diff title="...">                                   a unified diff, pasted as is (git diff output)
+<script type="text/plain">diff --git ...</script>       use the script wrapper when the diff contains <
+</rk-diff>
 <rk-cols><div>...</div><div>...</div></rk-cols>         side-by-side columns
 
 ## Or write markdown and render it
@@ -60,6 +63,7 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
   steps    numbered steps, one per line "Title | detail"
   board    "title: ...", "columns: Now,Next,Later,Cut", then "ID | title | column" lines;
            renders a drag-and-drop board with markdown export (items without a column start in Inbox)
+  diff     optional "title: ...", then a unified diff as is (git diff output)
 
 ## Rules
 
