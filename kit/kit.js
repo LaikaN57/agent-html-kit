@@ -161,6 +161,17 @@ body.rk-plain .rk-tl .k{box-shadow:0 0 0 4px #fff}
 .rk-q.u{margin-top:12px;min-height:0;border:1.5px dashed #cbd5e1;background:#f1f4f8}
 .rk-mi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:7px 10px;margin-top:6px;font-size:13.5px;box-shadow:0 1px 2px rgba(15,23,42,.05);overflow-wrap:anywhere}
 .rk-mi .rk-id{margin-right:6px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}.rk-mi .why{color:var(--muted);font-size:12px}
+.rk-diff{margin:0 0 16px;overflow:hidden}
+.rk-diff>.rk-ctitle{padding:14px 18px 0}
+.rk-diff .fh{display:flex;gap:10px;align-items:center;padding:9px 16px;background:#f8fafc;border-top:1px solid var(--line);border-bottom:1px solid var(--line);font:600 13px var(--mono);color:var(--ink)}
+.rk-diff .fh:first-child{border-top:0}
+.rk-diff .fh .fn{flex:1;min-width:0;overflow-wrap:anywhere}.rk-diff .fh .a{color:var(--green)}.rk-diff .fh .d{color:var(--red)}
+.rk-diff .code{overflow-x:auto;font:12.5px/1.6 var(--mono);color:var(--ink2)}
+.rk-diff .code>div{width:max-content;min-width:100%}
+.rk-diff .ln{white-space:pre;padding:0 16px}
+.rk-diff .ln.a{background:#ecfdf3;color:var(--green)}.rk-diff .ln.d{background:#fef2f2;color:var(--red)}
+.rk-diff .ln.h{background:var(--soft);color:var(--muted);padding:3px 16px}.rk-diff .ln.h b{color:var(--ink2);font-weight:600}
+.rk-diff .ln.m{color:var(--muted);font-style:italic}
 .rk-btn{font:650 13px var(--font);color:#fff;background:var(--accent);border:0;border-radius:10px;padding:8px 14px;cursor:pointer}
 .rk-out{width:100%;min-height:120px;margin-top:10px;font:13px/1.5 var(--mono);border:1px solid var(--line);border-radius:10px;padding:10px;display:none}
 body.rk-plain{background:#fff;color:#1f2328;font:16px/1.6 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
@@ -781,6 +792,59 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
       unplaced.length ? `<div class="rk-q u"><div class="qh"><span>Unplaced: level must be high or low</span><span>${unplaced.length}</span></div>${unplaced.map((c) => card(c, why(c))).join("")}</div>` : ""}</div>`;
   }
 
+  // Unified diff: file bars with +N / -M (counted here), @@ hunk headers, colored +/- lines.
+  // Hunk sizes from "@@ -a,b +c,d @@" decide where a hunk ends, so a removed "-- x" line is never read as a "--- file" header.
+  function diff(el, ls, meta) {
+    meta = meta || {};
+    const title = meta.title || el.getAttribute("title") || "";
+    const L = (ls || rawText(el).replace(/\r/g, "").split("\n")).slice();
+    while (L.length && !L[0].trim()) L.shift();
+    while (L.length && !L[L.length - 1].trim()) L.pop();
+    if (!L.length) return;
+    const files = [];
+    let f = null, left = []; // [old, new] lines still due in this hunk; [] = sizes unknown (a pasted hunk without @@)
+    const file = (name) => files.push((f = { name, add: 0, del: 0, rows: [], hunks: 0 }));
+    const row = (cls, html) => { if (!f) file(""); f.rows.push(`<div class="ln ${cls}">${html || " "}</div>`); };
+    const path = (s) => s.replace(/\t.*$/, "").replace(/^"?[ab]\//, "").replace(/"$/, "");
+    for (let i = 0; i < L.length; i++) {
+      const l = L[i], c = l[0];
+      const head = /^diff --git /.test(l) || (/^--- /.test(l) && /^\+\+\+ /.test(L[i + 1] || ""));
+      // Hand-written hunks often get the sizes wrong, so +/-/space lines after the count runs out still count as content.
+      const due = left.length && (left[0] > 0 || left[1] > 0);
+      if (due ? /^([-+ \\]|$)/.test(l) : !head && (left.length ? /^[-+ \\]/ : /^([-+ \\]|$)/).test(l)) {
+        if (!f) file("");
+        if (c === "\\") { row("m", esc(l)); continue; }
+        const k = c === "+" ? "a" : c === "-" ? "d" : "c";
+        if (k === "a") f.add++;
+        if (k === "d") f.del++;
+        if (left.length) { if (k !== "a") left[0]--; if (k !== "d") left[1]--; }
+        row(k, esc(l));
+        continue;
+      }
+      let m;
+      if ((m = l.match(/^diff --git (?:"?a\/.*?"?) "?b\/(.*?)"?$/))) { file(m[1]); left = []; continue; }
+      if (/^--- /.test(l) && /^\+\+\+ /.test(L[i + 1] || "")) {
+        const a = path(l.slice(4)), b = path(L[++i].slice(4));
+        const name = b === "/dev/null" ? a : a === "/dev/null" || a === b ? b : `${a} → ${b}`;
+        if (!f || f.hunks) file(name);
+        else f.name = name;
+        left = [];
+        continue;
+      }
+      if ((m = l.match(/^@@+ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@+\s?(.*)$/))) {
+        left = [m[1] == null ? 1 : +m[1], m[2] == null ? 1 : +m[2]];
+        row("h", `${esc(l.slice(0, l.length - m[3].length).trim())}${m[3] ? ` <b>${esc(m[3])}</b>` : ""}`);
+        f.hunks++;
+        continue;
+      }
+      if (/^@@/.test(l)) { left = []; row("h", esc(l)); f.hunks++; continue; } // hand-written "@@" without line numbers
+      if (!l.trim() || /^index [0-9a-f]+\.\./.test(l)) continue; // gaps between files; blob hashes mean nothing to a reader
+      row("m", esc(l)); // mode changes, renames, "Binary files differ", stray text
+    }
+    el.innerHTML = `<div class="rk-card rk-diff">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}${files.map((x) =>
+      `<div class="fh"><span class="fn">${esc(x.name || "changes")}</span><span class="a">+${x.add}</span><span class="d">-${x.del}</span></div><div class="code"><div>${x.rows.join("")}</div></div>`).join("")}</div>`;
+  }
+
   /* ---------- markdown renderer (for .md written by the agent) ---------- */
 
   const FENCES = {
@@ -793,6 +857,8 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     stats: (ls) => mk(stats, ls),
     steps: (ls) => mk(steps, ls),
     timeline: (ls) => { const m = splitMeta(ls, ["title"]); return mk(timeline, ls, m); },
+    // A diff keeps its leading spaces and blank context lines, so it reads the untrimmed body.
+    diff: (ls, raw) => { raw = raw.slice(); const m = splitMeta(raw, ["title"]); return mk(diff, raw, m); },
   };
   function mk(fn, ls, meta) { const d = document.createElement("div"); fn(d, ls, meta); return d; }
 
@@ -833,7 +899,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
         i++;
         while (i < L.length && !/^```/.test(L[i])) body.push(L[i++]);
         i++;
-        if (!plain && FENCES[lang]) root.appendChild(FENCES[lang](body.map((s) => s.trim()).filter(Boolean)));
+        if (!plain && FENCES[lang]) root.appendChild(FENCES[lang](body.map((s) => s.trim()).filter(Boolean), body));
         else add(`<pre><code${lang ? ` class="language-${lang}"` : ""}>${esc(body.join("\n"))}</code></pre>`);
         continue;
       }
@@ -889,7 +955,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
 
   // Plain HTML the agent wrote (<p>, <li>, callout text...): same inline formatting as the components,
   // so **bold**, `code`, [done] and CHK-1 work in any text. Component data and code are left alone.
-  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-progress,rk-matrix,rk-timeline,rk-pill";
+  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-progress,rk-matrix,rk-timeline,rk-diff,rk-pill";
   function formatText(root) {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const todo = [];
@@ -945,6 +1011,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     run("rk-board", (el) => board(el));
     run("rk-compare", (el) => compare(el));
     run("rk-matrix", (el) => matrix(el));
+    run("rk-diff", (el) => diff(el));
     run("rk-pill", (el) => { el.outerHTML = pill((el.getAttribute("s") || "todo").toLowerCase(), el.textContent.trim()); });
     run("table", (t) => { if (!t.closest(".rk-tablewrap")) { const w = document.createElement("div"); w.className = "rk-tablewrap"; t.replaceWith(w); w.appendChild(t); } });
     document.documentElement.dataset.rkReady = "1";

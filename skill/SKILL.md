@@ -15,7 +15,7 @@ document loads it with one line.
 Start the file with exactly this line, then write only content:
 <!doctype html><meta charset="utf-8"><script src="kit/kit.js" defer></script>
 
-Never write <style>, other <script> tags, style attributes, CSS or SVG. The kit draws everything.
+Never write <style>, other <script> tags (except rk-diff's text/plain wrapper), style attributes, CSS or SVG. The kit draws everything.
 Plain <h2> <h3> <p> <ul> <ol> <li> <b> <code> <a> are styled. In any text: **bold**, `code`,
 status pills [done] [progress] [blocked] [todo] [warn], and IDs like ABC-123 are formatted.
 
@@ -52,6 +52,9 @@ ID | title | column (optional, items start in Inbox)
 <rk-matrix title="..." y="Impact" x="Effort">           2x2 grid; quadrants="TL,TR,BL,BR" renames them
 ID | title | y-level | x-level                          levels high|low, e.g. CHK-1 | Apple Pay | high | low
 </rk-matrix>
+<rk-diff title="...">                                   a unified diff, pasted as is (git diff output)
+<script type="text/plain">diff --git ...</script>       use the script wrapper when the diff contains <
+</rk-diff>
 <rk-cols><div>...</div><div>...</div></rk-cols>         side-by-side columns
 
 ## Or write markdown and render it
@@ -79,6 +82,7 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
            renders a drag-and-drop board with markdown export (items without a column start in Inbox)
   matrix   optional "title:", "y: Impact", "x: Effort", "quadrants: A,B,C,D", then "ID | title | y-level | x-level"
            lines with levels high|low; renders a 2x2 grid (default quadrants Quick wins, Big bets, Fill-ins, Avoid)
+  diff     optional "title: ...", then a unified diff as is (git diff output)
 
 ## Rules
 
