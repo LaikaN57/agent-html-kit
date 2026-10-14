@@ -117,6 +117,18 @@ background:var(--soft);color:var(--accent);font-weight:750;font-size:14px}
 .rk-item.pick{outline:2px solid var(--accent);outline-offset:1px}
 .rk-board .hint{font-size:12px;color:var(--muted);margin:-4px 0 10px}
 @media (max-width:700px){.rk-board .lanes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.rk-matrix{padding:18px 20px;margin:0 0 16px}
+.rk-matrix .mx{display:grid;grid-template-columns:20px minmax(0,1fr) minmax(0,1fr);gap:10px}
+.rk-matrix .ax{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:center}
+.rk-matrix .ay{writing-mode:vertical-rl;transform:rotate(180deg)}
+.rk-q{border:1px solid var(--line);border-radius:12px;padding:10px;min-height:110px;background:#f8fafc}
+.rk-q .qh{display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin-bottom:2px}
+.rk-q.g{background:#f0fdf4;border-color:#bbf7d0}.rk-q.g .qh{color:var(--green)}
+.rk-q.b{background:#f5f7ff;border-color:#c7d2fe}.rk-q.b .qh{color:var(--accent)}
+.rk-q.r{background:#fff5f5;border-color:#fecaca}.rk-q.r .qh{color:var(--red)}
+.rk-q.u{margin-top:12px;min-height:0;border:1.5px dashed #cbd5e1;background:#f1f4f8}
+.rk-mi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:7px 10px;margin-top:6px;font-size:13.5px;box-shadow:0 1px 2px rgba(15,23,42,.05);overflow-wrap:anywhere}
+.rk-mi .rk-id{margin-right:6px;display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}.rk-mi .why{color:var(--muted);font-size:12px}
 .rk-btn{font:650 13px var(--font);color:#fff;background:var(--accent);border:0;border-radius:10px;padding:8px 14px;cursor:pointer}
 .rk-out{width:100%;min-height:120px;margin-top:10px;font:13px/1.5 var(--mono);border:1px solid var(--line);border-radius:10px;padding:10px;display:none}
 body.rk-plain{background:#fff;color:#1f2328;font:16px/1.6 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
@@ -597,12 +609,43 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     });
   }
 
+  // Matrix: "ID | title | y-level | x-level" items in a 2x2 grid (impact vs effort by default).
+  function matrix(el, ls, meta) {
+    meta = meta || {};
+    const items = (ls || lines(rawText(el))).map(cells).filter((c) => !/^id$/i.test(c[0]));
+    if (!items.length) return;
+    const x = meta.x || el.getAttribute("x") || "Effort", y = meta.y || el.getAttribute("y") || "Impact";
+    const std = /^effort$/i.test(x) && /^impact$/i.test(y);
+    const lvl = (s) => (/^(h|high)$/i.test(s || "") ? "High" : /^(l|low)$/i.test(s || "") ? "Low" : null);
+    // Reading order: top-left, top-right, bottom-left, bottom-right (high y on top, low x on the left).
+    const pos = [["High", "Low"], ["High", "High"], ["Low", "Low"], ["Low", "High"]];
+    const given = (meta.quadrants || el.getAttribute("quadrants") || "").split(",").map((s) => s.trim());
+    const names = pos.map(([yl, xl], i) => given[i] || (std ? ["Quick wins", "Big bets", "Fill-ins", "Avoid"][i] : `${yl} ${y} · ${xl} ${x}`));
+    const tint = std ? ["g", "b", "", "r"] : ["", "", "", ""];
+    const quads = pos.map(() => []), unplaced = [];
+    items.forEach((c) => {
+      const k = pos.findIndex(([yl, xl]) => yl === lvl(c[2]) && xl === lvl(c[3]));
+      (k < 0 ? unplaced : quads[k]).push(c);
+    });
+    const card = ([id, title], why) => `<div class="rk-mi">${id ? `<span class="rk-id">${esc(id)}</span>` : ""}${inline(title || "")}${why ? ` <span class="why">${why}</span>` : ""}</div>`;
+    const quad = (name, list, cls) => `<div class="rk-q ${cls}"><div class="qh"><span>${inline(name, false)}</span><span>${list.length}</span></div>${list.map((c) => card(c)).join("")}</div>`;
+    const title = meta.title || el.getAttribute("title") || "";
+    // Bad levels stay visible with what was written, so a typo is seen instead of silently dropped.
+    const why = (c) => esc(`${y}: ${c[2] || "?"} · ${x}: ${c[3] || "?"}`);
+    el.innerHTML = `<div class="rk-card rk-matrix">${title ? `<div class="rk-ctitle">${inline(title)}</div>` : ""}<div class="mx">
+<div class="ax ay">High ${esc(y)}</div>${quad(names[0], quads[0], tint[0])}${quad(names[1], quads[1], tint[1])}
+<div class="ax ay">Low ${esc(y)}</div>${quad(names[2], quads[2], tint[2])}${quad(names[3], quads[3], tint[3])}
+<div></div><div class="ax">Low ${esc(x)}</div><div class="ax">High ${esc(x)}</div></div>${
+      unplaced.length ? `<div class="rk-q u"><div class="qh"><span>Unplaced: level must be high or low</span><span>${unplaced.length}</span></div>${unplaced.map((c) => card(c, why(c))).join("")}</div>` : ""}</div>`;
+  }
+
   /* ---------- markdown renderer (for .md written by the agent) ---------- */
 
   const FENCES = {
     chart: (ls) => { const m = splitMeta(ls, ["title", "type", "unit", "noavg"]); return mk(chart, ls, m); },
     diagram: (ls) => { const m = splitMeta(ls, ["title", "direction"]); return mk(diagram, ls, m); },
     board: (ls) => { const m = splitMeta(ls, ["title", "columns"]); return mk(board, ls, m); },
+    matrix: (ls) => { const m = splitMeta(ls, ["title", "x", "y", "quadrants"]); return mk(matrix, ls, m); },
     stats: (ls) => mk(stats, ls),
     steps: (ls) => mk(steps, ls),
   };
@@ -701,7 +744,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
 
   // Plain HTML the agent wrote (<p>, <li>, callout text...): same inline formatting as the components,
   // so **bold**, `code`, [done] and CHK-1 work in any text. Component data and code are left alone.
-  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-pill";
+  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-matrix,rk-pill";
   function formatText(root) {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const todo = [];
@@ -753,6 +796,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     run("rk-diagram", (el) => diagram(el));
     run("rk-steps", (el) => steps(el));
     run("rk-board", (el) => board(el));
+    run("rk-matrix", (el) => matrix(el));
     run("rk-pill", (el) => { el.outerHTML = pill((el.getAttribute("s") || "todo").toLowerCase(), el.textContent.trim()); });
     run("table", (t) => { if (!t.closest(".rk-tablewrap")) { const w = document.createElement("div"); w.className = "rk-tablewrap"; t.replaceWith(w); w.appendChild(t); } });
     document.documentElement.dataset.rkReady = "1";
