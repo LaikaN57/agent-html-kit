@@ -56,6 +56,7 @@ ID | title | y-level | x-level                          levels high|low, e.g. CH
 <script type="text/plain">diff --git ...</script>       use the script wrapper when the diff contains <
 </rk-diff>
 <rk-cols><div>...</div><div>...</div></rk-cols>         side-by-side columns
+<rk-toc></rk-toc>                                       table of contents from the h2/h3 headings (depth="2": h2 only)
 
 ## Or write markdown and render it
 
@@ -67,6 +68,7 @@ Write GitHub-flavored Markdown, no raw HTML. Our renderer adds:
 - A line "stats: value label | value label | ..." becomes stat cards.
 - Status pills anywhere, including table cells: [done] [progress] [blocked] [todo] [warn].
 - IDs like ABC-123 become chips.
+- A line "[toc]" alone becomes a table of contents of the ## and ### headings.
 - Blockquotes starting "Risk:", "Warning:", "Note:" or "OK:" become colored callouts.
 - Fenced blocks by language:
   chart    optional header lines "title: ...", "type: bar|line|hbar", "unit: ms", then "Label: number" lines

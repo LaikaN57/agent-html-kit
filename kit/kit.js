@@ -173,6 +173,16 @@ body.rk-plain .rk-tl .k{box-shadow:0 0 0 4px #fff}
 .rk-diff .ln.h{background:var(--soft);color:var(--muted);padding:3px 16px}.rk-diff .ln.h b{color:var(--ink2);font-weight:600}
 .rk-diff .ln.m{color:var(--muted);font-style:italic}
 .rk-btn{font:650 13px var(--font);color:#fff;background:var(--accent);border:0;border-radius:10px;padding:8px 14px;cursor:pointer}
+rk-toc{display:block}.rk-toc{padding:16px 20px;margin:18px 0}
+.rk-page .rk-toc ul{list-style:none;margin:0;padding:0}
+.rk-page .rk-toc>ul{columns:2 240px;column-gap:28px}
+.rk-page .rk-toc>ul>li{break-inside:avoid}
+.rk-page .rk-toc li{margin:0;padding:2px 0}
+.rk-page .rk-toc ul ul{margin:2px 0 4px 3px;padding-left:12px;border-left:2px solid var(--line)}
+.rk-page .rk-toc a{color:var(--ink2);text-decoration:none;font-size:14px}
+.rk-page .rk-toc>ul>li>a{font-weight:600;color:var(--ink)}
+.rk-page .rk-toc a:hover{color:var(--accent);text-decoration:underline}
+.rk-page [id]{scroll-margin-top:16px}
 .rk-out{width:100%;min-height:120px;margin-top:10px;font:13px/1.5 var(--mono);border:1px solid var(--line);border-radius:10px;padding:10px;display:none}
 body.rk-plain{background:#fff;color:#1f2328;font:16px/1.6 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
 body.rk-plain .rk-page{max-width:900px}
@@ -845,6 +855,37 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
       `<div class="fh"><span class="fn">${esc(x.name || "changes")}</span><span class="a">+${x.add}</span><span class="d">-${x.del}</span></div><div class="code"><div>${x.rows.join("")}</div></div>`).join("")}</div>`;
   }
 
+  // Headings outside components get a slug id (an id the writer set is kept), so #links work with or without a TOC.
+  const IN_COMPONENT = "rk-header,rk-stats,rk-chart,rk-table,rk-callout,rk-diagram,rk-steps,rk-board,rk-toc,.rk-card,.rk-callout";
+  function anchors(page) {
+    const used = new Set([...document.querySelectorAll("[id]")].map((e) => e.id));
+    return [...page.querySelectorAll("h1,h2,h3,h4,h5,h6")].filter((h) => !h.parentElement.closest(IN_COMPONENT)).map((h) => {
+      if (!h.id) {
+        const base = h.textContent.trim().toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, "").replace(/[\s-]+/g, "-").replace(/^-|-$/g, "") || "section";
+        let id = base;
+        for (let k = 2; used.has(id); k++) id = `${base}-${k}`;
+        used.add(id); h.id = id;
+      }
+      return h;
+    });
+  }
+
+  // Table of contents from the h2/h3 (depth="2": h2 only) found by anchors(); runs after every other component.
+  function toc(el, hs) {
+    const depth = el.getAttribute("depth") === "2" ? 2 : 3;
+    hs = hs.filter((h) => h.tagName === "H2" || (depth === 3 && h.tagName === "H3"));
+    if (hs.length < 2) { el.innerHTML = ""; return; }
+    const items = [];
+    hs.forEach((h) => {
+      const a = `<a href="#${esc(encodeURIComponent(h.id))}">${esc(h.textContent.trim())}</a>`;
+      // An h3 before the first h2 has no parent entry, so it sits at the top level.
+      if (h.tagName === "H3" && items.length && items[items.length - 1].h2) items[items.length - 1].kids.push(a);
+      else items.push({ a, h2: h.tagName === "H2", kids: [] });
+    });
+    el.innerHTML = `<nav class="rk-card rk-toc"><div class="rk-ctitle">${inline(el.getAttribute("title") || "Contents")}</div><ul>${items.map((it) =>
+      `<li>${it.a}${it.kids.length ? `<ul>${it.kids.map((k) => `<li>${k}</li>`).join("")}</ul>` : ""}</li>`).join("")}</ul></nav>`;
+  }
+
   /* ---------- markdown renderer (for .md written by the agent) ---------- */
 
   const FENCES = {
@@ -910,6 +951,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
         } else add(`<h${m[1].length}>${inline(m[2], !plain)}</h${m[1].length}>`);
         i++; continue;
       }
+      if (!plain && /^\s*\[toc\]\s*$/i.test(line)) { flush(); root.appendChild(document.createElement("rk-toc")); i++; continue; }
       if (/^\s*(-{3,}|\*{3,})\s*$/.test(line)) { flush(); add("<hr>"); i++; continue; }
       if (!plain && (m = line.match(/^stats:\s*(.+)$/i))) {
         flush();
@@ -955,7 +997,7 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
 
   // Plain HTML the agent wrote (<p>, <li>, callout text...): same inline formatting as the components,
   // so **bold**, `code`, [done] and CHK-1 work in any text. Component data and code are left alone.
-  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-progress,rk-matrix,rk-timeline,rk-diff,rk-pill";
+  const SKIP = "pre,code,script,style,textarea,svg,a,rk-header,rk-stats,rk-chart,rk-table,rk-diagram,rk-steps,rk-board,rk-compare,rk-progress,rk-matrix,rk-timeline,rk-diff,rk-toc,rk-pill";
   function formatText(root) {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const todo = [];
@@ -1013,6 +1055,8 @@ ${hasInbox ? `<div class="rk-lane inbox" data-col="Inbox"><div class="lh"><span>
     run("rk-matrix", (el) => matrix(el));
     run("rk-diff", (el) => diff(el));
     run("rk-pill", (el) => { el.outerHTML = pill((el.getAttribute("s") || "todo").toLowerCase(), el.textContent.trim()); });
+    const hs = anchors(page);
+    run("rk-toc", (el) => toc(el, hs));
     run("table", (t) => { if (!t.closest(".rk-tablewrap")) { const w = document.createElement("div"); w.className = "rk-tablewrap"; t.replaceWith(w); w.appendChild(t); } });
     document.documentElement.dataset.rkReady = "1";
   }
